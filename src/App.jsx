@@ -1,52 +1,124 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useReducer } from 'react'
 import { categories, gradients, allQuotes, currentYear } from './data'
 
-const navPages = ['about', 'contact', 'privacy', 'terms', 'disclaimer']
-const quoteTabs = ['MOTIVATION', 'SUCCESS', 'TECH', 'CRITICAL_THINKING', 'HINDI', 'URDU', 'LIKED']
-const tabKeys = quoteTabs.filter(k => k !== 'LIKED')
+const tabKeys = Object.keys(categories).filter(k => k !== 'LIKED')
+
+function favReducer(state, action) {
+  switch (action.type) {
+    case 'TOGGLE': return state.includes(action.text) ? state.filter(t => t !== action.text) : [...state, action.text]
+    case 'REMOVE': return state.filter(t => t !== action.text)
+    case 'RESTORE': return action.payload
+    default: return state
+  }
+}
+
+function getSavedIndex(cat) {
+  try { return parseInt(localStorage.getItem('inspire-idx-'+cat) || '0', 10) } catch { return 0 }
+}
+function saveIndex(cat, idx) {
+  try { localStorage.setItem('inspire-idx-'+cat, String(idx)) } catch {}
+}
 
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [page, setPage] = useState('quotes')
-  const [tab, setTab] = useState('MOTIVATION')
-  const [index, setIndex] = useState(0)
-  const [favorites, setFavorites] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('inspire-favs') || '[]') }
-    catch { return [] }
+  const [page, setPage] = useState(() => localStorage.getItem('inspire-page') || 'quotes')
+  const [tab, setTabState] = useState(() => localStorage.getItem('inspire-tab') || 'MOTIVATION')
+  const [index, setIndex] = useState(() => getSavedIndex(localStorage.getItem('inspire-tab') || 'MOTIVATION'))
+  const [favorites, dispatchFav] = useReducer(favReducer, [], () => {
+    try { return JSON.parse(localStorage.getItem('inspire-favs') || '[]') } catch { return [] }
   })
   const [copied, setCopied] = useState(false)
   const [scrollY, setScrollY] = useState(0)
   const [dark, setDark] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('inspire-dark') || 'false') }
-    catch { return false }
+    try { return JSON.parse(localStorage.getItem('inspire-dark') || 'false') } catch { return false }
   })
+  const [undoStack, setUndoStack] = useState([])
+  const [redoStack, setRedoStack] = useState([])
+  const [undoCat, setUndoCat] = useState(null)
+  const [redoCat, setRedoCat] = useState(null)
+  const [showFavActions, setShowFavActions] = useState(false)
 
   const allFiltered = tab === 'LIKED'
     ? allQuotes.filter(q => favorites.includes(q.text))
     : allQuotes.filter(q => q.category === tab)
 
-  const quote = allFiltered.length > 0 ? allFiltered[index % allFiltered.length] : null
+  const safeIndex = allFiltered.length > 0 ? index % allFiltered.length : 0
+  const quote = allFiltered.length > 0 ? allFiltered[safeIndex] : null
   const isFav = quote && favorites.includes(quote.text)
   const [g1, g2] = gradients[tab] || ['#6C63FF', '#764BA2']
 
-  const likedQuotes = allQuotes.filter(q => favorites.includes(q.text))
-
   useEffect(() => { localStorage.setItem('inspire-favs', JSON.stringify(favorites)) }, [favorites])
   useEffect(() => { localStorage.setItem('inspire-dark', JSON.stringify(dark)) }, [dark])
+  useEffect(() => { localStorage.setItem('inspire-page', page) }, [page])
+  useEffect(() => { localStorage.setItem('inspire-tab', tab) }, [tab])
   useEffect(() => { document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light') }, [dark])
-  useEffect(() => { setIndex(0) }, [tab])
-  useEffect(() => { setMenuOpen(false) }, [page])
+  useEffect(() => { setMenuOpen(false) }, [page, tab])
   useEffect(() => { const h = () => setScrollY(window.scrollY); window.addEventListener('scroll', h, {passive: true}); return () => window.removeEventListener('scroll', h) }, [])
   useEffect(() => { if (copied) { const t = setTimeout(() => setCopied(false), 2200); return () => clearTimeout(t) } }, [copied])
+  useEffect(() => { if (tab === 'LIKED' && favorites.length > 0) setShowFavActions(true); else setShowFavActions(false) }, [tab, favorites])
+
+  const setTab = useCallback((t) => {
+    setTabState(t)
+    const savedIdx = getSavedIndex(t)
+    setIndex(savedIdx)
+  }, [])
+
+  const setIndexWrap = useCallback((idx, cat) => {
+    const c = cat || tab
+    const qs = c === 'LIKED' ? allQuotes.filter(q => favorites.includes(q.text)) : allQuotes.filter(q => q.category === c)
+    const wrapped = qs.length > 0 ? idx % qs.length : 0
+    setIndex(wrapped)
+    saveIndex(c, wrapped)
+  }, [tab, favorites])
 
   const toggleFav = useCallback(() => {
     if (!quote) return
-    setFavorites(prev => isFav ? prev.filter(t => t !== quote.text) : [...prev, quote.text])
-  }, [quote, isFav])
+    const text = quote.text
+    setUndoStack(prev => [...prev, { type: 'TOGGLE', text }].slice(-30))
+    setRedoStack([])
+    dispatchFav({ type: 'TOGGLE', text })
+  }, [quote])
 
-  const removeFav = useCallback((text) => {
-    setFavorites(prev => prev.filter(t => t !== text))
+  const removeFavInline = useCallback((text) => {
+    setUndoStack(prev => [...prev, { type: 'REMOVE', text }].slice(-30))
+    setRedoStack([])
+    dispatchFav({ type: 'REMOVE', text })
   }, [])
+
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return
+    const last = undoStack[undoStack.length - 1]
+    setRedoStack(prev => [...prev, last])
+    setUndoStack(prev => prev.slice(0, -1))
+    if (last.type === 'TOGGLE') {
+      dispatchFav({ type: 'TOGGLE', text: last.text })
+    } else if (last.type === 'REMOVE') {
+      dispatchFav({ type: 'RESTORE', payload: [...favorites, last.text] })
+    } else if (last.type === 'CATEGORY') {
+      setTab(last.from)
+      setUndoCat(last.from)
+    }
+  }, [undoStack, favorites])
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return
+    const next = redoStack[redoStack.length - 1]
+    setUndoStack(prev => [...prev, next])
+    setRedoStack(prev => prev.slice(0, -1))
+    if (next.type === 'TOGGLE') {
+      dispatchFav({ type: 'TOGGLE', text: next.text })
+    } else if (next.type === 'REMOVE') {
+      dispatchFav({ type: 'REMOVE', text: next.text })
+    } else if (next.type === 'CATEGORY') {
+      setTab(next.to)
+    }
+  }, [redoStack])
+
+  const switchToCategory = useCallback((t) => {
+    setUndoStack(prev => [...prev, { type: 'CATEGORY', from: tab, to: t }].slice(-30))
+    setRedoStack([])
+    setTab(t)
+  }, [tab, setTab])
 
   const copyQuote = useCallback(() => {
     if (!quote) return
@@ -54,8 +126,8 @@ export default function App() {
   }, [quote])
 
   const nextQuote = useCallback(() => {
-    if (allFiltered.length > 0) setIndex(prev => (prev + 1) % allFiltered.length)
-  }, [allFiltered.length])
+    if (allFiltered.length > 0) setIndexWrap(safeIndex + 1)
+  }, [allFiltered.length, safeIndex, setIndexWrap, tab])
 
   const navTo = (p) => { setPage(p); window.scrollTo(0,0) }
   const headerScrolled = scrollY > 10
@@ -68,30 +140,16 @@ export default function App() {
         <button className="offcanvas-close" onClick={() => setMenuOpen(false)}>{'\u2715'}</button>
         <div className="offcanvas-links">
           <button className={page === 'quotes' ? 'oc-active' : ''} onClick={() => navTo('quotes')}>{'\uD83C\uDFE0'} Home</button>
+          <button className={page === 'archive' ? 'oc-active' : ''} onClick={() => navTo('archive')}>{'\uD83D\uDCC1'} Archive</button>
           <button className={page === 'about' ? 'oc-active' : ''} onClick={() => navTo('about')}>{'\u2139\uFE0F'} About Us</button>
           <button className={page === 'contact' ? 'oc-active' : ''} onClick={() => navTo('contact')}>{'\uD83D\uDCDE'} Contact Us</button>
           <button className={page === 'privacy' ? 'oc-active' : ''} onClick={() => navTo('privacy')}>{'\uD83D\uDD12'} Privacy Policy</button>
           <button className={page === 'terms' ? 'oc-active' : ''} onClick={() => navTo('terms')}>{'\uD83D\uDCDC'} Terms & Conditions</button>
           <button className={page === 'disclaimer' ? 'oc-active' : ''} onClick={() => navTo('disclaimer')}>{'\u26A0\uFE0F'} Disclaimer</button>
         </div>
-
-        <div className="offcanvas-liked">
-          <h3 className="oc-liked-title">{'\u2764\uFE0F'} Liked Quotes ({likedQuotes.length})</h3>
-          {likedQuotes.length === 0 ? (
-            <p className="oc-liked-empty">No liked quotes yet. Tap {'\uD83E\uDE77'} on any quote!</p>
-          ) : (
-            <div className="oc-liked-list">
-              {likedQuotes.map(q => (
-                <div key={q.text} className="oc-liked-item">
-                  <p className="oc-liked-text">{q.text}</p>
-                  <p className="oc-liked-author">{'\u2014'} {q.author}</p>
-                  <button className="oc-remove-btn" onClick={() => removeFav(q.text)} title="Unlike / Remove">
-                    {'\uD83D\uDC94'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="offcanvas-actions">
+          <button className="oc-undo-btn" onClick={handleUndo} disabled={undoStack.length === 0}>{'\u21A9'} Undo</button>
+          <button className="oc-redo-btn" onClick={handleRedo} disabled={redoStack.length === 0}>{'\u21AA'} Redo</button>
         </div>
       </nav>
 
@@ -114,11 +172,16 @@ export default function App() {
           <div className="header-actions">
             <nav className="desktop-nav">
               <button className={page === 'quotes' ? 'dn-active' : ''} onClick={() => navTo('quotes')}>Home</button>
+              <button className={page === 'archive' ? 'dn-active' : ''} onClick={() => navTo('archive')}>Archive</button>
               <button className={page === 'about' ? 'dn-active' : ''} onClick={() => navTo('about')}>About Us</button>
               <button className={page === 'contact' ? 'dn-active' : ''} onClick={() => navTo('contact')}>Contact Us</button>
-              <button className={page === 'privacy' ? 'dn-active' : ''} onClick={() => navTo('privacy')}>Privacy Policy</button>
+              <button className={page === 'privacy' ? 'dn-active' : ''} onClick={() => navTo('privacy')}>Privacy</button>
               <button className={page === 'terms' ? 'dn-active' : ''} onClick={() => navTo('terms')}>Terms</button>
               <button className={page === 'disclaimer' ? 'dn-active' : ''} onClick={() => navTo('disclaimer')}>Disclaimer</button>
+              <span className="undo-redo-inline">
+                <button onClick={handleUndo} disabled={undoStack.length === 0} title="Undo">{'\u21A9'}</button>
+                <button onClick={handleRedo} disabled={redoStack.length === 0} title="Redo">{'\u21AA'}</button>
+              </span>
             </nav>
             <button className="theme-toggle" onClick={() => setDark(prev => !prev)} title={dark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
               {dark ? '\u2600\uFE0F' : '\uD83C\uDF19'}
@@ -129,11 +192,11 @@ export default function App() {
 
       <main className="main-content">
         {page === 'quotes' ? (
-          <div className="app" style={{ background: `linear-gradient(135deg, ${g1} 0%, ${g2} 100%)`, minHeight: '100vh' }}>
+          <div className="app" style={{ background: `linear-gradient(135deg, ${g1} 0%, ${g2} 100%)` }}>
             <div className="container">
               <div className="tabs">
                 {tabKeys.map(key => (
-                  <button key={key} className={`tab ${key === tab ? 'tab-active' : ''}`} onClick={() => setTab(key)}>
+                  <button key={key} className={`tab ${key === tab ? 'tab-active' : ''}`} onClick={() => switchToCategory(key)}>
                     <span className="tab-emoji">{categories[key].emoji}</span>
                     <span className="tab-label">{categories[key].label}</span>
                   </button>
@@ -145,9 +208,9 @@ export default function App() {
               </div>
 
               {allFiltered.length === 0 ? (
-                <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-                  <p style={{ fontSize: '3rem', marginBottom: '8px' }}>{'\uD83D\uDC94'}</p>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>No liked quotes yet. Tap the heart on any quote to save it here!</p>
+                <div className="card" style={{ textAlign: 'center', padding: '36px 24px' }}>
+                  <p style={{ fontSize: '2.5rem', marginBottom: '8px' }}>{'\uD83D\uDC94'}</p>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>No liked quotes yet. Tap {'\uD83E\uDE77'} on any quote!</p>
                 </div>
               ) : (
                 <>
@@ -166,7 +229,13 @@ export default function App() {
                       </button>
                     </div>
 
-                    {copied && <p className="copied-feedback" style={{ color: g1 }}>{'\u2705'} Copied to clipboard!</p>}
+                    {copied && <p className="copied-feedback" style={{ color: g1 }}>{'\u2705'} Copied!</p>}
+
+                    {tab === 'LIKED' && favorites.length > 0 && (
+                      <button className="remove-inline-btn" onClick={() => removeFavInline(quote.text)}>
+                        {'\uD83D\uDDD1'} Remove this quote
+                      </button>
+                    )}
 
                     <p className="quote-count">{allFiltered.length} quotes{tab === 'LIKED' ? ' liked' : ' in this category'}</p>
                   </div>
@@ -178,6 +247,8 @@ export default function App() {
               )}
             </div>
           </div>
+        ) : page === 'archive' ? (
+          <ArchivePage navTo={navTo} />
         ) : (
           <StaticPage page={page} navTo={navTo} />
         )}
@@ -190,6 +261,34 @@ export default function App() {
   )
 }
 
+function ArchivePage({ navTo }) {
+  const allCats = Object.keys(categories).filter(k => k !== 'LIKED')
+  const [activeCat, setActiveCat] = useState(allCats[0])
+  const quotesForCat = allQuotes.filter(q => q.category === activeCat)
+
+  return (
+    <div className="archive-page">
+      <h1 className="archive-title">Archive</h1>
+      <div className="archive-tabs">
+        {allCats.map(cat => (
+          <button key={cat} className={`archive-tab ${cat === activeCat ? 'archive-tab-active' : ''}`} onClick={() => setActiveCat(cat)}>
+            {categories[cat].emoji} {categories[cat].label}
+          </button>
+        ))}
+      </div>
+      <div className="archive-grid">
+        {quotesForCat.map((q, i) => (
+          <div key={i} className="archive-card">
+            <p className="archive-quote-text">{q.text}</p>
+            <p className="archive-quote-author">{'\u2014'} {q.author}</p>
+          </div>
+        ))}
+      </div>
+      <button className="cta-btn" onClick={() => navTo('quotes')} style={{ marginTop: '24px' }}>Back to Quotes</button>
+    </div>
+  )
+}
+
 function StaticPage({ page, navTo }) {
   return (
     <div className="static-page">
@@ -198,9 +297,8 @@ function StaticPage({ page, navTo }) {
           <>
             <h1>About Us</h1>
             <p>Welcome to <strong>Inspire</strong> — your daily dose of motivation, wisdom, and positivity.</p>
-            <p>Our mission is to bring you the most inspiring quotes from great thinkers, leaders, philosophers, and visionaries across the world. We curate hand-picked quotes across categories like Motivation, Success, Technology, Critical Thinking, Hindi Wisdom, and Urdu Poetry.</p>
+            <p>Our mission is to bring you the most inspiring quotes from great thinkers, leaders, philosophers, and visionaries across the world.</p>
             <p>Inspire was built with a simple belief: <em>words have the power to change your mindset, and a changed mindset can change your life.</em></p>
-            <p>Whether you need a push to start your day, a spark of creativity for your work, or some ancient wisdom for your soul — Inspire is here for you.</p>
             <button className="cta-btn" onClick={() => navTo('quotes')}>Explore Quotes</button>
           </>
         )}
@@ -223,13 +321,9 @@ function StaticPage({ page, navTo }) {
           <>
             <h1>Privacy Policy</h1>
             <p><strong>Last updated:</strong> July 2026</p>
-            <p>Inspire ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how we handle your information.</p>
-            <h2>Information We Collect</h2>
             <p>Inspire does <strong>not</strong> collect, store, or transmit any personal data. All favorites and preferences are stored locally on your device using your browser's localStorage and never leave your device.</p>
             <h2>Third-Party Services</h2>
             <p>We do not use any third-party analytics, advertising, or tracking services.</p>
-            <h2>Changes to This Policy</h2>
-            <p>We may update this policy from time to time. Continued use of Inspire after changes constitutes acceptance.</p>
           </>
         )}
         {page === 'terms' && (
@@ -239,24 +333,15 @@ function StaticPage({ page, navTo }) {
             <p>By accessing and using Inspire, you agree to be bound by these Terms & Conditions.</p>
             <h2>Use of Content</h2>
             <p>All quotes displayed on Inspire are attributed to their original authors where known. The compilation, design, and user interface are the intellectual property of Inspire.</p>
-            <h2>Disclaimer</h2>
-            <p>The content on Inspire is provided for informational and motivational purposes only. We make no guarantees about the accuracy or completeness of quote attributions.</p>
-            <h2>Limitation of Liability</h2>
-            <p>Inspire shall not be liable for any damages arising from the use or inability to use the application.</p>
           </>
         )}
         {page === 'disclaimer' && (
           <>
             <h1>Disclaimer</h1>
             <p><strong>Last updated:</strong> July 2026</p>
-            <h2>General Disclaimer</h2>
-            <p>The information provided by Inspire is for general informational and motivational purposes only. All information is provided in good faith; however, we make no representation or warranty of any kind.</p>
-            <h2>Quote Attribution</h2>
-            <p>While we strive to verify quote attributions, some attributions may be inaccurate or disputed. Quotes marked as "Unknown" reflect our inability to verify the original source.</p>
-            <h2>External Links</h2>
-            <p>Inspire may contain links to external websites. We are not responsible for the content or privacy practices of those sites.</p>
+            <p>The information provided by Inspire is for general informational and motivational purposes only.</p>
             <h2>No Professional Advice</h2>
-            <p>The content on Inspire does not constitute professional advice of any kind (legal, medical, financial, or otherwise).</p>
+            <p>The content on Inspire does not constitute professional advice of any kind.</p>
           </>
         )}
       </div>
