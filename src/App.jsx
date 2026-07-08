@@ -34,9 +34,6 @@ export default function App() {
   })
   const [undoStack, setUndoStack] = useState([])
   const [redoStack, setRedoStack] = useState([])
-  const [undoCat, setUndoCat] = useState(null)
-  const [redoCat, setRedoCat] = useState(null)
-  const [showFavActions, setShowFavActions] = useState(false)
 
   const allFiltered = tab === 'LIKED'
     ? allQuotes.filter(q => favorites.includes(q.text))
@@ -55,12 +52,10 @@ export default function App() {
   useEffect(() => { setMenuOpen(false) }, [page, tab])
   useEffect(() => { const h = () => setScrollY(window.scrollY); window.addEventListener('scroll', h, {passive: true}); return () => window.removeEventListener('scroll', h) }, [])
   useEffect(() => { if (copied) { const t = setTimeout(() => setCopied(false), 2200); return () => clearTimeout(t) } }, [copied])
-  useEffect(() => { if (tab === 'LIKED' && favorites.length > 0) setShowFavActions(true); else setShowFavActions(false) }, [tab, favorites])
 
   const setTab = useCallback((t) => {
     setTabState(t)
-    const savedIdx = getSavedIndex(t)
-    setIndex(savedIdx)
+    setIndex(getSavedIndex(t))
   }, [])
 
   const setIndexWrap = useCallback((idx, cat) => {
@@ -73,10 +68,9 @@ export default function App() {
 
   const toggleFav = useCallback(() => {
     if (!quote) return
-    const text = quote.text
-    setUndoStack(prev => [...prev, { type: 'TOGGLE', text }].slice(-30))
+    setUndoStack(prev => [...prev, { type: 'TOGGLE', text: quote.text }].slice(-30))
     setRedoStack([])
-    dispatchFav({ type: 'TOGGLE', text })
+    dispatchFav({ type: 'TOGGLE', text: quote.text })
   }, [quote])
 
   const removeFavInline = useCallback((text) => {
@@ -96,7 +90,6 @@ export default function App() {
       dispatchFav({ type: 'RESTORE', payload: [...favorites, last.text] })
     } else if (last.type === 'CATEGORY') {
       setTab(last.from)
-      setUndoCat(last.from)
     }
   }, [undoStack, favorites])
 
@@ -122,7 +115,7 @@ export default function App() {
 
   const copyQuote = useCallback(() => {
     if (!quote) return
-    navigator.clipboard.writeText(`"${quote.text}" \u2014 ${quote.author}`).then(() => setCopied(true)).catch(() => {})
+    navigator.clipboard.writeText('"' + quote.text + '" — ' + quote.author).then(() => setCopied(true)).catch(() => {})
   }, [quote])
 
   const prevQuote = useCallback(() => {
@@ -140,24 +133,24 @@ export default function App() {
     <div className="app-shell">
       {menuOpen && <div className="overlay" onClick={() => setMenuOpen(false)} />}
 
-      <nav className={`offcanvas ${menuOpen ? 'offcanvas-open' : ''}`}>
-        <button className="offcanvas-close" onClick={() => setMenuOpen(false)}>{'\u2715'}</button>
+      <nav className={'offcanvas' + (menuOpen ? ' offcanvas-open' : '')}>
+        <button className="offcanvas-close" onClick={() => setMenuOpen(false)}>✕</button>
         <div className="offcanvas-links">
-          <button className={page === 'quotes' ? 'oc-active' : ''} onClick={() => navTo('quotes')}>{'\uD83C\uDFE0'} Home</button>
-          <button className={page === 'archive' ? 'oc-active' : ''} onClick={() => navTo('archive')}>{'\uD83D\uDCC1'} Archive</button>
-          <button className={page === 'about' ? 'oc-active' : ''} onClick={() => navTo('about')}>{'\u2139\uFE0F'} About Us</button>
-          <button className={page === 'contact' ? 'oc-active' : ''} onClick={() => navTo('contact')}>{'\uD83D\uDCDE'} Contact Us</button>
-          <button className={page === 'privacy' ? 'oc-active' : ''} onClick={() => navTo('privacy')}>{'\uD83D\uDD12'} Privacy Policy</button>
-          <button className={page === 'terms' ? 'oc-active' : ''} onClick={() => navTo('terms')}>{'\uD83D\uDCDC'} Terms & Conditions</button>
-          <button className={page === 'disclaimer' ? 'oc-active' : ''} onClick={() => navTo('disclaimer')}>{'\u26A0\uFE0F'} Disclaimer</button>
+          <button className={page === 'quotes' ? 'oc-active' : ''} onClick={() => navTo('quotes')}>🏠 Home</button>
+          <button className={page === 'archive' ? 'oc-active' : ''} onClick={() => navTo('archive')}>📁 Archive</button>
+          <button className={page === 'about' ? 'oc-active' : ''} onClick={() => navTo('about')}>ℹ️ About Us</button>
+          <button className={page === 'contact' ? 'oc-active' : ''} onClick={() => navTo('contact')}>📞 Contact Us</button>
+          <button className={page === 'privacy' ? 'oc-active' : ''} onClick={() => navTo('privacy')}>🔒 Privacy Policy</button>
+          <button className={page === 'terms' ? 'oc-active' : ''} onClick={() => navTo('terms')}>📜 Terms & Conditions</button>
+          <button className={page === 'disclaimer' ? 'oc-active' : ''} onClick={() => navTo('disclaimer')}>⚠️ Disclaimer</button>
         </div>
         <div className="offcanvas-actions">
-          <button className="oc-undo-btn" onClick={handleUndo} disabled={undoStack.length === 0}>{'\u21A9'} Undo</button>
-          <button className="oc-redo-btn" onClick={handleRedo} disabled={redoStack.length === 0}>{'\u21AA'} Redo</button>
+          <button className="oc-undo-btn" onClick={handleUndo} disabled={undoStack.length === 0}>↩ Undo</button>
+          <button className="oc-redo-btn" onClick={handleRedo} disabled={redoStack.length === 0}>↪ Redo</button>
         </div>
       </nav>
 
-      <header className={`header ${headerScrolled ? 'header-scrolled' : ''}`}>
+      <header className={'header' + (headerScrolled ? ' header-scrolled' : '')}>
         <div className="header-inner">
           <button className="hamburger" onClick={() => setMenuOpen(true)} aria-label="Menu">
             <span /><span /><span />
@@ -177,18 +170,18 @@ export default function App() {
             <nav className="desktop-nav">
               <button className={page === 'quotes' ? 'dn-active' : ''} onClick={() => navTo('quotes')}>Home</button>
               <button className={page === 'archive' ? 'dn-active' : ''} onClick={() => navTo('archive')}>Archive</button>
-              <button className={page === 'about' ? 'dn-active' : ''} onClick={() => navTo('about')}>About Us</button>
-              <button className={page === 'contact' ? 'dn-active' : ''} onClick={() => navTo('contact')}>Contact Us</button>
+              <button className={page === 'about' ? 'dn-active' : ''} onClick={() => navTo('about')}>About</button>
+              <button className={page === 'contact' ? 'dn-active' : ''} onClick={() => navTo('contact')}>Contact</button>
               <button className={page === 'privacy' ? 'dn-active' : ''} onClick={() => navTo('privacy')}>Privacy</button>
               <button className={page === 'terms' ? 'dn-active' : ''} onClick={() => navTo('terms')}>Terms</button>
               <button className={page === 'disclaimer' ? 'dn-active' : ''} onClick={() => navTo('disclaimer')}>Disclaimer</button>
               <span className="undo-redo-inline">
-                <button onClick={handleUndo} disabled={undoStack.length === 0} title="Undo">{'\u21A9'}</button>
-                <button onClick={handleRedo} disabled={redoStack.length === 0} title="Redo">{'\u21AA'}</button>
+                <button onClick={handleUndo} disabled={undoStack.length === 0} title="Undo">↩</button>
+                <button onClick={handleRedo} disabled={redoStack.length === 0} title="Redo">↪</button>
               </span>
             </nav>
-            <button className="theme-toggle" onClick={() => setDark(prev => !prev)} title={dark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
-              {dark ? '\u2600\uFE0F' : '\uD83C\uDF19'}
+            <button className="theme-toggle" onClick={() => setDark(prev => !prev)} title={dark ? 'Switch to Light' : 'Switch to Dark'}>
+              {dark ? '☀️' : '🌙'}
             </button>
           </div>
         </div>
@@ -196,48 +189,48 @@ export default function App() {
 
       <main className="main-content">
         {page === 'quotes' ? (
-          <div className="app" style={{ background: `linear-gradient(135deg, ${g1} 0%, ${g2} 100%)` }}>
+          <div className="app" style={{ background: 'linear-gradient(135deg, ' + g1 + ' 0%, ' + g2 + ' 100%)' }}>
             <div className="container">
               <div className="tabs">
                 {tabKeys.map(key => (
-                  <button key={key} className={`tab ${key === tab ? 'tab-active' : ''}`} onClick={() => switchToCategory(key)}>
+                  <button key={key} className={'tab' + (key === tab ? ' tab-active' : '')} onClick={() => switchToCategory(key)}>
                     <span className="tab-emoji">{categories[key].emoji}</span>
                     <span className="tab-label">{categories[key].label}</span>
                   </button>
                 ))}
-                <button className={`tab ${'LIKED' === tab ? 'tab-active liked-tab' : ''}`} onClick={() => setTab('LIKED')}>
+                <button className={'tab' + ('LIKED' === tab ? ' tab-active liked-tab' : '')} onClick={() => setTab('LIKED')}>
                   <span className="tab-emoji">{categories.LIKED.emoji}</span>
-                  <span className="tab-label">{categories.LIKED.label}{favorites.length > 0 ? ` (${favorites.length})` : ''}</span>
+                  <span className="tab-label">{categories.LIKED.label}{favorites.length > 0 ? ' (' + favorites.length + ')' : ''}</span>
                 </button>
               </div>
 
               {allFiltered.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', padding: '36px 24px' }}>
-                  <p style={{ fontSize: '2.5rem', marginBottom: '8px' }}>{'\uD83D\uDC94'}</p>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>No liked quotes yet. Tap {'\uD83E\uDE77'} on any quote!</p>
+                  <p style={{ fontSize: '2.5rem', marginBottom: '8px' }}>💔</p>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>No liked quotes yet. Tap the heart on any quote!</p>
                 </div>
               ) : (
                 <>
                   <div className="card">
-                    <span className="quote-marks" style={{ color: g1 }}>{'\u275D\u275E'}</span>
+                    <span className="quote-marks" style={{ color: g1 }}>❝❞</span>
                     <p className="quote-text">{quote.text}</p>
                     <div className="divider" style={{ background: g1 }} />
-                    <p className="quote-author">{'\u2014'} {quote.author}</p>
+                    <p className="quote-author">— {quote.author}</p>
 
                     <div className="actions">
                       <button className="action-btn" onClick={toggleFav} title={isFav ? 'Remove favorite' : 'Add favorite'}>
-                        {isFav ? '\u2764\uFE0F' : '\uD83E\uDE77'}
+                        {isFav ? '❤️' : '🤍'}
                       </button>
                       <button className="action-btn" onClick={copyQuote} title="Copy to clipboard">
-                        {'\uD83D\uDCCB'}
+                        📋
                       </button>
                     </div>
 
-                    {copied && <p className="copied-feedback" style={{ color: g1 }}>{'\u2705'} Copied!</p>}
+                    {copied && <p className="copied-feedback" style={{ color: g1 }}>✅ Copied!</p>}
 
                     {tab === 'LIKED' && favorites.length > 0 && (
                       <button className="remove-inline-btn" onClick={() => removeFavInline(quote.text)}>
-                        {'\uD83D\uDDD1'} Remove this quote
+                        🗑 Remove this quote
                       </button>
                     )}
 
@@ -245,12 +238,8 @@ export default function App() {
                   </div>
 
                   <div className="nav-row">
-                    <button className="nav-btn" onClick={prevQuote} style={{ color: g1 }}>
-                      {'\u2190'} Previous
-                    </button>
-                    <button className="nav-btn" onClick={nextQuote} style={{ color: g1 }}>
-                      Next {'\u2192'}
-                    </button>
+                    <button className="nav-btn" onClick={prevQuote} style={{ color: g1 }}>← Previous</button>
+                    <button className="nav-btn" onClick={nextQuote} style={{ color: g1 }}>Next →</button>
                   </div>
                 </>
               )}
@@ -264,7 +253,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        <p className="copyright">{'\u00A9'} {currentYear} Sohel Khan. All rights reserved.</p>
+        <p className="copyright">© {currentYear} Sohel Khan. All rights reserved.</p>
       </footer>
     </div>
   )
@@ -277,10 +266,10 @@ function ArchivePage({ navTo }) {
 
   return (
     <div className="archive-page">
-      <h1 className="archive-title">Archive</h1>
+      <h1 className="archive-title">📁 Archive</h1>
       <div className="archive-tabs">
         {allCats.map(cat => (
-          <button key={cat} className={`archive-tab ${cat === activeCat ? 'archive-tab-active' : ''}`} onClick={() => setActiveCat(cat)}>
+          <button key={cat} className={'archive-tab' + (cat === activeCat ? ' archive-tab-active' : '')} onClick={() => setActiveCat(cat)}>
             {categories[cat].emoji} {categories[cat].label}
           </button>
         ))}
@@ -289,7 +278,7 @@ function ArchivePage({ navTo }) {
         {quotesForCat.map((q, i) => (
           <div key={i} className="archive-card">
             <p className="archive-quote-text">{q.text}</p>
-            <p className="archive-quote-author">{'\u2014'} {q.author}</p>
+            <p className="archive-quote-author">— {q.author}</p>
           </div>
         ))}
       </div>
@@ -316,7 +305,7 @@ function StaticPage({ page, navTo }) {
             <h1>Contact Us</h1>
             <p>We'd love to hear from you! Whether you have a suggestion, want to contribute quotes, or just want to say hello — feel free to reach out.</p>
             <div className="contact-card">
-              <span className="contact-icon">{'\uD83D\uDCDE'}</span>
+              <span className="contact-icon">📞</span>
               <div>
                 <p style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: '4px' }}>Call / WhatsApp</p>
                 <a href="tel:+919026053036" className="phone-link">+91 90260 53036</a>
