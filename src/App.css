@@ -209,14 +209,15 @@ body {
 .remove-inline-btn:hover { background: rgba(233,30,99,0.15); transform: scale(1.03); }
 
 /* ── NEXT BUTTON ── */
-.next-btn {
-  width: 100%; padding: 14px; border: none; border-radius: 16px;
-  background: rgba(255,255,255,0.93); font-size: 1rem; font-weight: 700;
+.nav-row { display: flex; gap: 12px; width: 100%; }
+.nav-btn {
+  flex: 1; padding: 14px; border: none; border-radius: 16px;
+  background: rgba(255,255,255,0.93); font-size: 0.95rem; font-weight: 700;
   cursor: pointer; transition: all 0.25s; box-shadow: 0 4px 16px rgba(0,0,0,0.08);
   font-family: inherit; letter-spacing: 0.3px;
 }
-.next-btn:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
-.next-btn:active { transform: translateY(0); }
+.nav-btn:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
+.nav-btn:active { transform: translateY(0); }
 
 /* ── ARCHIVE PAGE ── */
 .archive-page {

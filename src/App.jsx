@@ -125,6 +125,10 @@ export default function App() {
     navigator.clipboard.writeText(`"${quote.text}" \u2014 ${quote.author}`).then(() => setCopied(true)).catch(() => {})
   }, [quote])
 
+  const prevQuote = useCallback(() => {
+    if (allFiltered.length > 0) setIndexWrap(safeIndex - 1 + allFiltered.length)
+  }, [allFiltered.length, safeIndex, setIndexWrap, tab])
+
   const nextQuote = useCallback(() => {
     if (allFiltered.length > 0) setIndexWrap(safeIndex + 1)
   }, [allFiltered.length, safeIndex, setIndexWrap, tab])
@@ -240,9 +244,14 @@ export default function App() {
                     <p className="quote-count">{allFiltered.length} quotes{tab === 'LIKED' ? ' liked' : ' in this category'}</p>
                   </div>
 
-                  <button className="next-btn" onClick={nextQuote} style={{ color: g1 }}>
-                    Next Quote
-                  </button>
+                  <div className="nav-row">
+                    <button className="nav-btn" onClick={prevQuote} style={{ color: g1 }}>
+                      {'\u2190'} Previous
+                    </button>
+                    <button className="nav-btn" onClick={nextQuote} style={{ color: g1 }}>
+                      Next {'\u2192'}
+                    </button>
+                  </div>
                 </>
               )}
             </div>
