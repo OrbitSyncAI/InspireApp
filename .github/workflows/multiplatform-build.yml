@@ -1,8 +1,5 @@
 # ============================================================
-#  InspireApp — Ultra-Fast Multi-Platform Build Pipeline
-#  Targets: Windows EXE | macOS DMG | Linux AppImage |
-#           Android APK | iOS IPA Framework
-#  Strategy: Fully parallel matrix, aggressive caching
+#  InspireApp — Fixed Multi-Platform Build Pipeline
 # ============================================================
 
 name: 🚀 Multi-Platform Build
@@ -12,31 +9,22 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
-  workflow_dispatch:          # Allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true   # Cancel superseded runs instantly
+  cancel-in-progress: true
 
-# ---------------------------------------------------------------------------
-# Global environment shared across all jobs
-# ---------------------------------------------------------------------------
 env:
   NODE_VERSION: "22"
-  JAVA_VERSION: "17"
+  JAVA_VERSION: "21"
   APP_NAME: "InspireApp"
   ELECTRON_VERSION: "31"
 
-# ===========================================================================
-# JOB 1 ─ Build the Vite web bundle (shared artifact consumed by all targets)
-# ===========================================================================
 jobs:
   build-web:
     name: 🌐 Vite Web Bundle
     runs-on: ubuntu-latest
-    outputs:
-      dist-artifact: web-dist
-
     steps:
       - name: ⬇️ Checkout source
         uses: actions/checkout@v4
@@ -53,7 +41,6 @@ jobs:
       - name: 🔨 Vite production build
         run: npm run build
 
-      # Upload the dist/ folder so every platform job can download it
       - name: 📤 Upload web dist
         uses: actions/upload-artifact@v4
         with:
@@ -62,10 +49,6 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # ===========================================================================
-  # JOB 2 ─ Desktop builds (Windows / macOS / Linux) via Electron Builder
-  #          Runs in parallel on three native runners
-  # ===========================================================================
   build-desktop:
     name: 🖥️ Desktop — ${{ matrix.os-name }}
     needs: build-web
@@ -73,21 +56,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ── Windows ────────────────────────────────────────────────────────
           - runner: windows-latest
             os-name: Windows
             platform: win
             artifact-pattern: "release/*.exe"
             artifact-name: windows-exe
 
-          # ── macOS ──────────────────────────────────────────────────────────
           - runner: macos-latest
             os-name: macOS
             platform: mac
             artifact-pattern: "release/*.dmg"
             artifact-name: macos-dmg
 
-          # ── Linux ──────────────────────────────────────────────────────────
           - runner: ubuntu-latest
             os-name: Linux
             platform: linux
@@ -95,7 +75,6 @@ jobs:
             artifact-name: linux-appimage
 
     runs-on: ${{ matrix.runner }}
-
     steps:
       - name: ⬇️ Checkout source
         uses: actions/checkout@v4
@@ -106,14 +85,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
 
-      # Download the pre-built web bundle from Job 1
       - name: 📥 Download web dist
         uses: actions/download-artifact@v4
         with:
           name: web-dist
           path: dist/
 
-      # Cache Electron binaries (~300 MB) to avoid repeated downloads
       - name: 🗄️ Cache Electron binaries
         uses: actions/cache@v4
         with:
@@ -123,16 +100,13 @@ jobs:
             ~\AppData\Local\electron\Cache
           key: electron-${{ env.ELECTRON_VERSION }}-${{ matrix.runner }}
 
-      # Inject Electron wrapper (no source files are modified)
       - name: 🔧 Scaffold Electron wrapper
         shell: bash
         run: |
-          # ── electron/main.js ──────────────────────────────────────────────
           mkdir -p electron
           cat > electron/main.js << 'EOJS'
           const { app, BrowserWindow } = require('electron');
           const path = require('path');
-
           let win;
           function createWindow() {
             win = new BrowserWindow({
@@ -150,7 +124,6 @@ jobs:
           app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
           EOJS
 
-          # ── electron/package.json ─────────────────────────────────────────
           cat > electron/package.json << 'EOJSON'
           {
             "name": "inspire-app",
@@ -160,35 +133,17 @@ jobs:
           }
           EOJSON
 
+      # Windows friendly single-line install command
       - name: 📦 Install Electron + Builder
-        run: |
-          npm ci --prefer-offline
-          npm install --save-dev \
-            electron@${{ env.ELECTRON_VERSION }} \
-            electron-builder@latest \
-            --prefer-offline
-        working-directory: .
+        run: npm install --save-dev electron@${{ env.ELECTRON_VERSION }} electron-builder@latest --prefer-offline
 
       - name: 🏗️ Build desktop app — ${{ matrix.os-name }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npx electron-builder \
-            --${{ matrix.platform }} \
-            --dir release \
-            --config.appId "ai.orbitsync.inspireapp" \
-            --config.productName "InspireApp" \
-            --config.directories.buildResources "electron" \
-            --config.directories.output "release" \
-            --config.files "dist/**/*" \
-            --config.extraMetadata.main "electron/main.js" \
-            --config.win.target "nsis" \
-            --config.mac.target "dmg" \
-            --config.linux.target "AppImage" \
-            --publish never
+          npx electron-builder --${{ matrix.platform }} --config.appId "ai.orbitsync.inspireapp" --config.productName "InspireApp" --config.directories.buildResources "electron" --config.directories.output "release" --config.files "dist/**/*" --config.extraMetadata.main "electron/main.js" --config.win.target "nsis" --config.mac.target "dmg" --config.linux.target "AppImage" --publish never
 
-      # Fallback: capture everything in release/ if pattern finds nothing
       - name: 📤 Upload ${{ matrix.os-name }} binary
         uses: actions/upload-artifact@v4
         with:
@@ -197,14 +152,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # ===========================================================================
-  # JOB 3 ─ Android APK via Capacitor + Gradle
-  # ===========================================================================
   build-android:
     name: 🤖 Android APK
     needs: build-web
     runs-on: ubuntu-latest
-
     steps:
       - name: ⬇️ Checkout source
         uses: actions/checkout@v4
@@ -224,11 +175,6 @@ jobs:
       - name: 📱 Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: ✅ Accept Android SDK licenses
-        run: |
-          yes | sdkmanager --licenses || true
-
-      # Cache Gradle home + wrapper for massive speed gains
       - name: 🗄️ Cache Gradle
         uses: actions/cache@v4
         with:
@@ -237,13 +183,6 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
-
-      # Cache npm modules
-      - name: 🗄️ Cache npm modules
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
 
       - name: 📥 Download web dist
         uses: actions/download-artifact@v4
@@ -254,11 +193,7 @@ jobs:
       - name: 📦 Install dependencies + Capacitor CLI
         run: |
           npm ci --prefer-offline
-          npm install --save-dev \
-            @capacitor/core@latest \
-            @capacitor/cli@latest \
-            @capacitor/android@latest \
-            --prefer-offline
+          npm install --save-dev @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --prefer-offline
 
       - name: 🔧 Initialize Capacitor & add Android platform
         run: |
@@ -272,11 +207,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug \
-            --no-daemon \
-            --parallel \
-            --build-cache \
-            -Dorg.gradle.jvmargs="-Xmx4g -XX:+UseParallelGC"
+          ./gradlew assembleDebug --no-daemon --parallel --build-cache -Dorg.gradle.jvmargs="-Xmx4g -XX:+UseParallelGC"
 
       - name: 📤 Upload Android APK
         uses: actions/upload-artifact@v4
@@ -286,14 +217,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # ===========================================================================
-  # JOB 4 ─ iOS IPA Framework via Capacitor + Xcode (macOS runner required)
-  # ===========================================================================
   build-ios:
     name: 🍎 iOS IPA Framework
     needs: build-web
     runs-on: macos-latest
-
     steps:
       - name: ⬇️ Checkout source
         uses: actions/checkout@v4
@@ -313,11 +240,7 @@ jobs:
       - name: 📦 Install dependencies + Capacitor iOS
         run: |
           npm ci --prefer-offline
-          npm install --save-dev \
-            @capacitor/core@latest \
-            @capacitor/cli@latest \
-            @capacitor/ios@latest \
-            --prefer-offline
+          npm install --save-dev @capacitor/core@latest @capacitor/cli@latest @capacitor/ios@latest --prefer-offline
 
       - name: 🔧 Initialize Capacitor & add iOS platform
         run: |
@@ -327,31 +250,17 @@ jobs:
       - name: 🔄 Sync Capacitor
         run: npx cap sync ios
 
-      # Select latest available Xcode
       - name: 🛠️ Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      # Build unsigned .xcarchive (no Apple developer cert required in CI)
       - name: 🏗️ Xcode Archive (unsigned)
         run: |
-          xcodebuild archive \
-            -workspace ios/App/App.xcworkspace \
-            -scheme App \
-            -configuration Release \
-            -archivePath ios/App/build/InspireApp.xcarchive \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            SKIP_INSTALL=NO \
-            | xcpretty || true
+          xcodebuild archive -workspace ios/App/App.xcworkspace -scheme App -configuration Release -archivePath ios/App/build/InspireApp.xcarchive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO SKIP_INSTALL=NO | xcpretty || true
 
-      # Export IPA-compatible framework payload
       - name: 📦 Export app framework
         run: |
           mkdir -p ios/App/build/Payload
-          cp -r \
-            "ios/App/build/InspireApp.xcarchive/Products/Applications/App.app" \
-            "ios/App/build/Payload/App.app" || true
+          cp -r "ios/App/build/InspireApp.xcarchive/Products/Applications/App.app" "ios/App/build/Payload/App.app" || true
           cd ios/App/build
           zip -r InspireApp-iOS.ipa Payload/ || true
 
@@ -365,44 +274,25 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # ===========================================================================
-  # JOB 5 ─ Aggregate all platform outputs into ONE downloadable release bundle
-  # ===========================================================================
   bundle-release:
     name: 📦 Bundle All Platforms → Release
     needs: [build-desktop, build-android, build-ios]
     runs-on: ubuntu-latest
-    if: always()   # Run even if some platform jobs failed (partial results)
-
+    if: always()
     steps:
       - name: 📥 Download all platform artifacts
         uses: actions/download-artifact@v4
         with:
           path: all-builds/
-          # Downloads every artifact into all-builds/<artifact-name>/
 
       - name: 🗂️ Organize release bundle
         run: |
           mkdir -p release-bundle/{windows,macos,linux,android,ios}
-
-          # Copy each platform's outputs into named folders
           cp -r all-builds/windows-exe/*   release-bundle/windows/   2>/dev/null || true
           cp -r all-builds/macos-dmg/*     release-bundle/macos/     2>/dev/null || true
           cp -r all-builds/linux-appimage/* release-bundle/linux/    2>/dev/null || true
           cp -r all-builds/android-apk/*   release-bundle/android/   2>/dev/null || true
           cp -r all-builds/ios-ipa/*       release-bundle/ios/        2>/dev/null || true
-
-          # Generate build manifest
-          echo "=== InspireApp Multi-Platform Build ===" > release-bundle/BUILD_MANIFEST.txt
-          echo "Triggered by : ${{ github.actor }}"      >> release-bundle/BUILD_MANIFEST.txt
-          echo "Commit SHA   : ${{ github.sha }}"        >> release-bundle/BUILD_MANIFEST.txt
-          echo "Branch       : ${{ github.ref_name }}"   >> release-bundle/BUILD_MANIFEST.txt
-          echo "Build date   : $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> release-bundle/BUILD_MANIFEST.txt
-          echo ""                                         >> release-bundle/BUILD_MANIFEST.txt
-          echo "--- Included Artifacts ---"              >> release-bundle/BUILD_MANIFEST.txt
-          find release-bundle -type f | sort             >> release-bundle/BUILD_MANIFEST.txt
-
-          cat release-bundle/BUILD_MANIFEST.txt
 
       - name: 📤 Upload unified release bundle
         uses: actions/upload-artifact@v4
@@ -411,17 +301,3 @@ jobs:
           path: release-bundle/
           retention-days: 30
           if-no-files-found: warn
-
-      - name: ✅ Build summary
-        run: |
-          echo "## 🚀 InspireApp Multi-Platform Build Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| 🪟 Windows EXE   | ${{ needs.build-desktop.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🍎 macOS DMG     | ${{ needs.build-desktop.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🐧 Linux AppImage| ${{ needs.build-desktop.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🤖 Android APK   | ${{ needs.build-android.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📱 iOS IPA       | ${{ needs.build-ios.result }}     |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📦 **All artifacts bundled into:** \`InspireApp-All-Platforms-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
