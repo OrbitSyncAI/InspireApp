@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
-import { categories, gradients, allQuotes } from './data'
+import { categories, gradients, allQuotes, currentYear } from './data'
 
 const navPages = ['about', 'contact', 'privacy', 'terms', 'disclaimer']
-const quoteTabs = ['MOTIVATION', 'SUCCESS', 'TECH', 'CRITICAL_THINKING', 'HINDI', 'LIKED']
+const quoteTabs = ['MOTIVATION', 'SUCCESS', 'TECH', 'CRITICAL_THINKING', 'HINDI', 'URDU', 'LIKED']
 const tabKeys = quoteTabs.filter(k => k !== 'LIKED')
 
 export default function App() {
@@ -16,6 +16,10 @@ export default function App() {
   })
   const [copied, setCopied] = useState(false)
   const [scrollY, setScrollY] = useState(0)
+  const [dark, setDark] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('inspire-dark') || 'false') }
+    catch { return false }
+  })
 
   const allFiltered = tab === 'LIKED'
     ? allQuotes.filter(q => favorites.includes(q.text))
@@ -25,9 +29,13 @@ export default function App() {
   const isFav = quote && favorites.includes(quote.text)
   const [g1, g2] = gradients[tab] || ['#6C63FF', '#764BA2']
 
+  const likedQuotes = allQuotes.filter(q => favorites.includes(q.text))
+
   useEffect(() => { localStorage.setItem('inspire-favs', JSON.stringify(favorites)) }, [favorites])
+  useEffect(() => { localStorage.setItem('inspire-dark', JSON.stringify(dark)) }, [dark])
+  useEffect(() => { document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light') }, [dark])
   useEffect(() => { setIndex(0) }, [tab])
-  useEffect(() => { setMenuOpen(false) }, [page, tab])
+  useEffect(() => { setMenuOpen(false) }, [page])
   useEffect(() => { const h = () => setScrollY(window.scrollY); window.addEventListener('scroll', h, {passive: true}); return () => window.removeEventListener('scroll', h) }, [])
   useEffect(() => { if (copied) { const t = setTimeout(() => setCopied(false), 2200); return () => clearTimeout(t) } }, [copied])
 
@@ -35,6 +43,10 @@ export default function App() {
     if (!quote) return
     setFavorites(prev => isFav ? prev.filter(t => t !== quote.text) : [...prev, quote.text])
   }, [quote, isFav])
+
+  const removeFav = useCallback((text) => {
+    setFavorites(prev => prev.filter(t => t !== text))
+  }, [])
 
   const copyQuote = useCallback(() => {
     if (!quote) return
@@ -46,52 +58,79 @@ export default function App() {
   }, [allFiltered.length])
 
   const navTo = (p) => { setPage(p); window.scrollTo(0,0) }
-
   const headerScrolled = scrollY > 10
 
   return (
     <div className="app-shell">
-      {/* ── OVERLAY ── */}
       {menuOpen && <div className="overlay" onClick={() => setMenuOpen(false)} />}
 
-      {/* ── OFF-CANVAS MENU (Mobile) ── */}
       <nav className={`offcanvas ${menuOpen ? 'offcanvas-open' : ''}`}>
         <button className="offcanvas-close" onClick={() => setMenuOpen(false)}>{'\u2715'}</button>
         <div className="offcanvas-links">
-          <button className={page === 'quotes' ? 'oc-active' : ''} onClick={() => navTo('quotes')}>🏠 Home</button>
-          <button className={page === 'about' ? 'oc-active' : ''} onClick={() => navTo('about')}>ℹ️ About Us</button>
-          <button className={page === 'contact' ? 'oc-active' : ''} onClick={() => navTo('contact')}>📞 Contact Us</button>
-          <button className={page === 'privacy' ? 'oc-active' : ''} onClick={() => navTo('privacy')}>🔒 Privacy Policy</button>
-          <button className={page === 'terms' ? 'oc-active' : ''} onClick={() => navTo('terms')}>📜 Terms & Conditions</button>
-          <button className={page === 'disclaimer' ? 'oc-active' : ''} onClick={() => navTo('disclaimer')}>⚠️ Disclaimer</button>
+          <button className={page === 'quotes' ? 'oc-active' : ''} onClick={() => navTo('quotes')}>{'\uD83C\uDFE0'} Home</button>
+          <button className={page === 'about' ? 'oc-active' : ''} onClick={() => navTo('about')}>{'\u2139\uFE0F'} About Us</button>
+          <button className={page === 'contact' ? 'oc-active' : ''} onClick={() => navTo('contact')}>{'\uD83D\uDCDE'} Contact Us</button>
+          <button className={page === 'privacy' ? 'oc-active' : ''} onClick={() => navTo('privacy')}>{'\uD83D\uDD12'} Privacy Policy</button>
+          <button className={page === 'terms' ? 'oc-active' : ''} onClick={() => navTo('terms')}>{'\uD83D\uDCDC'} Terms & Conditions</button>
+          <button className={page === 'disclaimer' ? 'oc-active' : ''} onClick={() => navTo('disclaimer')}>{'\u26A0\uFE0F'} Disclaimer</button>
+        </div>
+
+        <div className="offcanvas-liked">
+          <h3 className="oc-liked-title">{'\u2764\uFE0F'} Liked Quotes ({likedQuotes.length})</h3>
+          {likedQuotes.length === 0 ? (
+            <p className="oc-liked-empty">No liked quotes yet. Tap {'\uD83E\uDE77'} on any quote!</p>
+          ) : (
+            <div className="oc-liked-list">
+              {likedQuotes.map(q => (
+                <div key={q.text} className="oc-liked-item">
+                  <p className="oc-liked-text">{q.text}</p>
+                  <p className="oc-liked-author">{'\u2014'} {q.author}</p>
+                  <button className="oc-remove-btn" onClick={() => removeFav(q.text)} title="Unlike / Remove">
+                    {'\uD83D\uDC94'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </nav>
 
-      {/* ── HEADER ── */}
       <header className={`header ${headerScrolled ? 'header-scrolled' : ''}`}>
         <div className="header-inner">
           <button className="hamburger" onClick={() => setMenuOpen(true)} aria-label="Menu">
             <span /><span /><span />
           </button>
-          <span className="logo" onClick={() => navTo('quotes')} style={{ cursor: 'pointer' }}>Inspire</span>
-          <nav className="desktop-nav">
-            <button className={page === 'quotes' ? 'dn-active' : ''} onClick={() => navTo('quotes')}>Home</button>
-            <button className={page === 'about' ? 'dn-active' : ''} onClick={() => navTo('about')}>About Us</button>
-            <button className={page === 'contact' ? 'dn-active' : ''} onClick={() => navTo('contact')}>Contact Us</button>
-            <button className={page === 'privacy' ? 'dn-active' : ''} onClick={() => navTo('privacy')}>Privacy Policy</button>
-            <button className={page === 'terms' ? 'dn-active' : ''} onClick={() => navTo('terms')}>Terms</button>
-            <button className={page === 'disclaimer' ? 'dn-active' : ''} onClick={() => navTo('disclaimer')}>Disclaimer</button>
-          </nav>
+          <svg className="logo-svg" onClick={() => navTo('quotes')} viewBox="0 0 200 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{cursor:'pointer'}}>
+            <defs>
+              <linearGradient id="lgGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#667EEA"/>
+                <stop offset="100%" stopColor="#F093FB"/>
+              </linearGradient>
+            </defs>
+            <circle cx="24" cy="24" r="20" fill="url(#lgGrad)" opacity="0.15"/>
+            <path d="M24 10 L20 20 L30 20 L26 30" fill="none" stroke="url(#lgGrad)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <text x="56" y="31" fill="url(#lgGrad)" fontFamily="system-ui, sans-serif" fontSize="22" fontWeight="800" letterSpacing="-0.5">Inspire</text>
+          </svg>
+          <div className="header-actions">
+            <nav className="desktop-nav">
+              <button className={page === 'quotes' ? 'dn-active' : ''} onClick={() => navTo('quotes')}>Home</button>
+              <button className={page === 'about' ? 'dn-active' : ''} onClick={() => navTo('about')}>About Us</button>
+              <button className={page === 'contact' ? 'dn-active' : ''} onClick={() => navTo('contact')}>Contact Us</button>
+              <button className={page === 'privacy' ? 'dn-active' : ''} onClick={() => navTo('privacy')}>Privacy Policy</button>
+              <button className={page === 'terms' ? 'dn-active' : ''} onClick={() => navTo('terms')}>Terms</button>
+              <button className={page === 'disclaimer' ? 'dn-active' : ''} onClick={() => navTo('disclaimer')}>Disclaimer</button>
+            </nav>
+            <button className="theme-toggle" onClick={() => setDark(prev => !prev)} title={dark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+              {dark ? '\u2600\uFE0F' : '\uD83C\uDF19'}
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* ── MAIN CONTENT ── */}
       <main className="main-content">
         {page === 'quotes' ? (
           <div className="app" style={{ background: `linear-gradient(135deg, ${g1} 0%, ${g2} 100%)`, minHeight: '100vh' }}>
             <div className="container">
-              <h1 className="title">Inspire</h1>
-
               <div className="tabs">
                 {tabKeys.map(key => (
                   <button key={key} className={`tab ${key === tab ? 'tab-active' : ''}`} onClick={() => setTab(key)}>
@@ -108,7 +147,7 @@ export default function App() {
               {allFiltered.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
                   <p style={{ fontSize: '3rem', marginBottom: '8px' }}>{'\uD83D\uDC94'}</p>
-                  <p style={{ color: '#888', fontSize: '1rem' }}>No liked quotes yet. Tap the heart on any quote to save it here!</p>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>No liked quotes yet. Tap the heart on any quote to save it here!</p>
                 </div>
               ) : (
                 <>
@@ -144,16 +183,8 @@ export default function App() {
         )}
       </main>
 
-      {/* ── FOOTER ── */}
       <footer className="footer">
-        <div className="footer-links">
-          <button onClick={() => navTo('about')}>About Us</button>
-          <button onClick={() => navTo('contact')}>Contact Us</button>
-          <button onClick={() => navTo('privacy')}>Privacy Policy</button>
-          <button onClick={() => navTo('terms')}>Terms & Conditions</button>
-          <button onClick={() => navTo('disclaimer')}>Disclaimer</button>
-        </div>
-        <p className="copyright">{'\u00A9'} Sohel Khan. All rights reserved.</p>
+        <p className="copyright">{'\u00A9'} {currentYear} Sohel Khan. All rights reserved.</p>
       </footer>
     </div>
   )
@@ -167,9 +198,9 @@ function StaticPage({ page, navTo }) {
           <>
             <h1>About Us</h1>
             <p>Welcome to <strong>Inspire</strong> — your daily dose of motivation, wisdom, and positivity.</p>
-            <p>Our mission is to bring you the most inspiring quotes from great thinkers, leaders, philosophers, and visionaries across the world. We curate hand-picked quotes across categories like Motivation, Success, Technology, Critical Thinking, and Hindi Wisdom.</p>
+            <p>Our mission is to bring you the most inspiring quotes from great thinkers, leaders, philosophers, and visionaries across the world. We curate hand-picked quotes across categories like Motivation, Success, Technology, Critical Thinking, Hindi Wisdom, and Urdu Poetry.</p>
             <p>Inspire was built with a simple belief: <em>words have the power to change your mindset, and a changed mindset can change your life.</em></p>
-            <p>Whether you need a push to start your day, a spark of creativity for your work, or some ancient Hindi wisdom for your soul — Inspire is here for you.</p>
+            <p>Whether you need a push to start your day, a spark of creativity for your work, or some ancient wisdom for your soul — Inspire is here for you.</p>
             <button className="cta-btn" onClick={() => navTo('quotes')}>Explore Quotes</button>
           </>
         )}
@@ -184,7 +215,7 @@ function StaticPage({ page, navTo }) {
                 <a href="tel:+919026053036" className="phone-link">+91 90260 53036</a>
               </div>
             </div>
-            <p style={{ marginTop: '16px', color: '#888' }}>We typically respond within 24 hours.</p>
+            <p style={{ marginTop: '16px' }}>We typically respond within 24 hours.</p>
             <button className="cta-btn" onClick={() => navTo('quotes')}>Back to Quotes</button>
           </>
         )}
