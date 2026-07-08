@@ -162,6 +162,7 @@ jobs:
 
       - name: 📦 Install Electron + Builder
         run: |
+          npm ci --prefer-offline
           npm install --save-dev \
             electron@${{ env.ELECTRON_VERSION }} \
             electron-builder@latest \
@@ -222,6 +223,10 @@ jobs:
 
       - name: 📱 Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: ✅ Accept Android SDK licenses
+        run: |
+          yes | sdkmanager --licenses || true
 
       # Cache Gradle home + wrapper for massive speed gains
       - name: 🗄️ Cache Gradle
