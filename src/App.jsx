@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useReducer } from 'react'
 import { categories, gradients, allQuotes, currentYear } from './data'
 
 const tabKeys = Object.keys(categories).filter(k => k !== 'LIKED')
+const PER_PAGE = 10
 
 function favReducer(state, action) {
   switch (action.type) {
@@ -12,12 +13,8 @@ function favReducer(state, action) {
   }
 }
 
-function getSavedIndex(cat) {
-  try { return parseInt(localStorage.getItem('inspire-idx-'+cat) || '0', 10) } catch { return 0 }
-}
-function saveIndex(cat, idx) {
-  try { localStorage.setItem('inspire-idx-'+cat, String(idx)) } catch {}
-}
+function getSavedIndex(cat) { try { return parseInt(localStorage.getItem('inspire-idx-'+cat) || '0', 10) } catch { return 0 } }
+function saveIndex(cat, idx) { try { localStorage.setItem('inspire-idx-'+cat, String(idx)) } catch {} }
 
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -34,6 +31,8 @@ export default function App() {
   })
   const [undoStack, setUndoStack] = useState([])
   const [redoStack, setRedoStack] = useState([])
+  const [viewMode, setViewMode] = useState('card')
+  const [listPage, setListPage] = useState(0)
 
   const allFiltered = tab === 'LIKED'
     ? allQuotes.filter(q => favorites.includes(q.text))
@@ -44,6 +43,10 @@ export default function App() {
   const isFav = quote && favorites.includes(quote.text)
   const [g1, g2] = gradients[tab] || ['#6C63FF', '#764BA2']
 
+  const totalPages = Math.ceil(allFiltered.length / PER_PAGE)
+  const listStart = listPage * PER_PAGE
+  const listQuotes = allFiltered.slice(listStart, listStart + PER_PAGE)
+
   useEffect(() => { localStorage.setItem('inspire-favs', JSON.stringify(favorites)) }, [favorites])
   useEffect(() => { localStorage.setItem('inspire-dark', JSON.stringify(dark)) }, [dark])
   useEffect(() => { localStorage.setItem('inspire-page', page) }, [page])
@@ -52,10 +55,12 @@ export default function App() {
   useEffect(() => { setMenuOpen(false) }, [page, tab])
   useEffect(() => { const h = () => setScrollY(window.scrollY); window.addEventListener('scroll', h, {passive: true}); return () => window.removeEventListener('scroll', h) }, [])
   useEffect(() => { if (copied) { const t = setTimeout(() => setCopied(false), 2200); return () => clearTimeout(t) } }, [copied])
+  useEffect(() => { setListPage(0) }, [tab])
 
   const setTab = useCallback((t) => {
     setTabState(t)
     setIndex(getSavedIndex(t))
+    setListPage(0)
   }, [])
 
   const setIndexWrap = useCallback((idx, cat) => {
@@ -84,13 +89,9 @@ export default function App() {
     const last = undoStack[undoStack.length - 1]
     setRedoStack(prev => [...prev, last])
     setUndoStack(prev => prev.slice(0, -1))
-    if (last.type === 'TOGGLE') {
-      dispatchFav({ type: 'TOGGLE', text: last.text })
-    } else if (last.type === 'REMOVE') {
-      dispatchFav({ type: 'RESTORE', payload: [...favorites, last.text] })
-    } else if (last.type === 'CATEGORY') {
-      setTab(last.from)
-    }
+    if (last.type === 'TOGGLE') dispatchFav({ type: 'TOGGLE', text: last.text })
+    else if (last.type === 'REMOVE') dispatchFav({ type: 'RESTORE', payload: [...favorites, last.text] })
+    else if (last.type === 'CATEGORY') setTab(last.from)
   }, [undoStack, favorites])
 
   const handleRedo = useCallback(() => {
@@ -98,13 +99,9 @@ export default function App() {
     const next = redoStack[redoStack.length - 1]
     setUndoStack(prev => [...prev, next])
     setRedoStack(prev => prev.slice(0, -1))
-    if (next.type === 'TOGGLE') {
-      dispatchFav({ type: 'TOGGLE', text: next.text })
-    } else if (next.type === 'REMOVE') {
-      dispatchFav({ type: 'REMOVE', text: next.text })
-    } else if (next.type === 'CATEGORY') {
-      setTab(next.to)
-    }
+    if (next.type === 'TOGGLE') dispatchFav({ type: 'TOGGLE', text: next.text })
+    else if (next.type === 'REMOVE') dispatchFav({ type: 'REMOVE', text: next.text })
+    else if (next.type === 'CATEGORY') setTab(next.to)
   }, [redoStack])
 
   const switchToCategory = useCallback((t) => {
@@ -115,8 +112,12 @@ export default function App() {
 
   const copyQuote = useCallback(() => {
     if (!quote) return
-    navigator.clipboard.writeText('"' + quote.text + '" — ' + quote.author).then(() => setCopied(true)).catch(() => {})
+    navigator.clipboard.writeText(quote.text).then(() => setCopied(true)).catch(() => {})
   }, [quote])
+
+  const copyListQuote = useCallback((text) => {
+    navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => {})
+  }, [])
 
   const prevQuote = useCallback(() => {
     if (allFiltered.length > 0) setIndexWrap(safeIndex - 1 + allFiltered.length)
@@ -126,13 +127,15 @@ export default function App() {
     if (allFiltered.length > 0) setIndexWrap(safeIndex + 1)
   }, [allFiltered.length, safeIndex, setIndexWrap, tab])
 
+  const prevListPage = () => setListPage(p => Math.max(0, p - 1))
+  const nextListPage = () => setListPage(p => Math.min(totalPages - 1, p + 1))
+
   const navTo = (p) => { setPage(p); window.scrollTo(0,0) }
   const headerScrolled = scrollY > 10
 
   return (
     <div className="app-shell">
       {menuOpen && <div className="overlay" onClick={() => setMenuOpen(false)} />}
-
       <nav className={'offcanvas' + (menuOpen ? ' offcanvas-open' : '')}>
         <button className="offcanvas-close" onClick={() => setMenuOpen(false)}>✕</button>
         <div className="offcanvas-links">
@@ -152,14 +155,11 @@ export default function App() {
 
       <header className={'header' + (headerScrolled ? ' header-scrolled' : '')}>
         <div className="header-inner">
-          <button className="hamburger" onClick={() => setMenuOpen(true)} aria-label="Menu">
-            <span /><span /><span />
-          </button>
+          <button className="hamburger" onClick={() => setMenuOpen(true)} aria-label="Menu"><span /><span /><span /></button>
           <svg className="logo-svg" onClick={() => navTo('quotes')} viewBox="0 0 200 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{cursor:'pointer'}}>
             <defs>
               <linearGradient id="lgGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#667EEA"/>
-                <stop offset="100%" stopColor="#F093FB"/>
+                <stop offset="0%" stopColor="#667EEA"/><stop offset="100%" stopColor="#F093FB"/>
               </linearGradient>
             </defs>
             <circle cx="24" cy="24" r="20" fill="url(#lgGrad)" opacity="0.15"/>
@@ -180,7 +180,7 @@ export default function App() {
                 <button onClick={handleRedo} disabled={redoStack.length === 0} title="Redo">↪</button>
               </span>
             </nav>
-            <button className="theme-toggle" onClick={() => setDark(prev => !prev)} title={dark ? 'Switch to Light' : 'Switch to Dark'}>
+            <button className="theme-toggle" onClick={() => setDark(prev => !prev)} title={dark ? 'Light' : 'Dark'}>
               {dark ? '☀️' : '🌙'}
             </button>
           </div>
@@ -204,42 +204,74 @@ export default function App() {
                 </button>
               </div>
 
+              {/* View toggle */}
+              {allFiltered.length > 0 && (
+                <div className="view-toggle">
+                  <button className={'vt-btn' + (viewMode === 'card' ? ' vt-active' : '')} onClick={() => setViewMode('card')}>🃏 Card</button>
+                  <button className={'vt-btn' + (viewMode === 'list' ? ' vt-active' : '')} onClick={() => setViewMode('list')}>📋 List</button>
+                </div>
+              )}
+
               {allFiltered.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', padding: '36px 24px' }}>
                   <p style={{ fontSize: '2.5rem', marginBottom: '8px' }}>💔</p>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>No liked quotes yet. Tap the heart on any quote!</p>
                 </div>
-              ) : (
+              ) : viewMode === 'card' ? (
                 <>
                   <div className="card">
                     <span className="quote-marks" style={{ color: g1 }}>❝❞</span>
                     <p className="quote-text">{quote.text}</p>
                     <div className="divider" style={{ background: g1 }} />
                     <p className="quote-author">— {quote.author}</p>
-
                     <div className="actions">
                       <button className="action-btn" onClick={toggleFav} title={isFav ? 'Remove favorite' : 'Add favorite'}>
                         {isFav ? '❤️' : '🤍'}
                       </button>
-                      <button className="action-btn" onClick={copyQuote} title="Copy to clipboard">
-                        📋
-                      </button>
+                      <button className="action-btn" onClick={copyQuote} title="Copy quote only">📋</button>
                     </div>
-
                     {copied && <p className="copied-feedback" style={{ color: g1 }}>✅ Copied!</p>}
-
                     {tab === 'LIKED' && favorites.length > 0 && (
-                      <button className="remove-inline-btn" onClick={() => removeFavInline(quote.text)}>
-                        🗑 Remove this quote
-                      </button>
+                      <button className="remove-inline-btn" onClick={() => removeFavInline(quote.text)}>🗑 Remove</button>
                     )}
-
                     <p className="quote-count">{allFiltered.length} quotes{tab === 'LIKED' ? ' liked' : ' in this category'}</p>
                   </div>
-
                   <div className="nav-row">
                     <button className="nav-btn" onClick={prevQuote} style={{ color: g1 }}>← Previous</button>
                     <button className="nav-btn" onClick={nextQuote} style={{ color: g1 }}>Next →</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="list-container">
+                    {listQuotes.map((q, i) => {
+                      const qIsFav = favorites.includes(q.text)
+                      return (
+                        <div key={i} className="list-card">
+                          <div className="list-card-top">
+                            <span className="list-num">{listStart + i + 1}</span>
+                            <div className="list-actions">
+                              <button className="list-action-btn" onClick={() => {
+                                const isF = favorites.includes(q.text)
+                                if (isF) dispatchFav({ type: 'REMOVE', text: q.text })
+                                else dispatchFav({ type: 'TOGGLE', text: q.text })
+                              }} title={qIsFav ? 'Unlike' : 'Like'}>
+                                {qIsFav ? '❤️' : '🤍'}
+                              </button>
+                              <button className="list-action-btn" onClick={() => copyListQuote(q.text)} title="Copy quote only">📋</button>
+                            </div>
+                          </div>
+                          <p className="list-quote-text">{q.text}</p>
+                          <p className="list-quote-author">— {q.author}</p>
+                        </div>
+                      )
+                    })}
+                    {copied && <p className="copied-feedback" style={{ color: g1, textAlign: 'center', marginTop: '8px' }}>✅ Copied!</p>}
+                  </div>
+                  <div className="nav-row">
+                    <button className="nav-btn" onClick={prevListPage} disabled={listPage === 0} style={{ color: g1 }}>← Previous</button>
+                    <span className="page-indicator">Page {listPage + 1} of {totalPages}</span>
+                    <button className="nav-btn" onClick={nextListPage} disabled={listPage >= totalPages - 1} style={{ color: g1 }}>Next →</button>
                   </div>
                 </>
               )}
@@ -263,6 +295,12 @@ function ArchivePage({ navTo }) {
   const allCats = Object.keys(categories).filter(k => k !== 'LIKED')
   const [activeCat, setActiveCat] = useState(allCats[0])
   const quotesForCat = allQuotes.filter(q => q.category === activeCat)
+  const [arcPage, setArcPage] = useState(0)
+  const perPage = 12
+  const totalArcPages = Math.ceil(quotesForCat.length / perPage)
+  const arcQuotes = quotesForCat.slice(arcPage * perPage, (arcPage + 1) * perPage)
+
+  useEffect(() => { setArcPage(0) }, [activeCat])
 
   return (
     <div className="archive-page">
@@ -275,13 +313,20 @@ function ArchivePage({ navTo }) {
         ))}
       </div>
       <div className="archive-grid">
-        {quotesForCat.map((q, i) => (
+        {arcQuotes.map((q, i) => (
           <div key={i} className="archive-card">
             <p className="archive-quote-text">{q.text}</p>
             <p className="archive-quote-author">— {q.author}</p>
           </div>
         ))}
       </div>
+      {totalArcPages > 1 && (
+        <div className="nav-row" style={{ marginTop: '16px' }}>
+          <button className="nav-btn" onClick={() => setArcPage(p => Math.max(0, p-1))} disabled={arcPage === 0} style={{ color: '#667EEA' }}>← Previous</button>
+          <span className="page-indicator">Page {arcPage + 1} of {totalArcPages}</span>
+          <button className="nav-btn" onClick={() => setArcPage(p => Math.min(totalArcPages-1, p+1))} disabled={arcPage >= totalArcPages - 1} style={{ color: '#667EEA' }}>Next →</button>
+        </div>
+      )}
       <button className="cta-btn" onClick={() => navTo('quotes')} style={{ marginTop: '24px' }}>Back to Quotes</button>
     </div>
   )
@@ -303,7 +348,7 @@ function StaticPage({ page, navTo }) {
         {page === 'contact' && (
           <>
             <h1>Contact Us</h1>
-            <p>We'd love to hear from you! Whether you have a suggestion, want to contribute quotes, or just want to say hello — feel free to reach out.</p>
+            <p>We'd love to hear from you!</p>
             <div className="contact-card">
               <span className="contact-icon">📞</span>
               <div>
@@ -319,9 +364,7 @@ function StaticPage({ page, navTo }) {
           <>
             <h1>Privacy Policy</h1>
             <p><strong>Last updated:</strong> July 2026</p>
-            <p>Inspire does <strong>not</strong> collect, store, or transmit any personal data. All favorites and preferences are stored locally on your device using your browser's localStorage and never leave your device.</p>
-            <h2>Third-Party Services</h2>
-            <p>We do not use any third-party analytics, advertising, or tracking services.</p>
+            <p>Inspire does <strong>not</strong> collect, store, or transmit any personal data.</p>
           </>
         )}
         {page === 'terms' && (
@@ -329,8 +372,6 @@ function StaticPage({ page, navTo }) {
             <h1>Terms & Conditions</h1>
             <p><strong>Last updated:</strong> July 2026</p>
             <p>By accessing and using Inspire, you agree to be bound by these Terms & Conditions.</p>
-            <h2>Use of Content</h2>
-            <p>All quotes displayed on Inspire are attributed to their original authors where known. The compilation, design, and user interface are the intellectual property of Inspire.</p>
           </>
         )}
         {page === 'disclaimer' && (
@@ -338,8 +379,6 @@ function StaticPage({ page, navTo }) {
             <h1>Disclaimer</h1>
             <p><strong>Last updated:</strong> July 2026</p>
             <p>The information provided by Inspire is for general informational and motivational purposes only.</p>
-            <h2>No Professional Advice</h2>
-            <p>The content on Inspire does not constitute professional advice of any kind.</p>
           </>
         )}
       </div>

@@ -208,7 +208,51 @@ body {
 }
 .remove-inline-btn:hover { background: rgba(233,30,99,0.15); transform: scale(1.03); }
 
-/* ── NEXT BUTTON ── */
+/* ── VIEW TOGGLE ── */
+.view-toggle { display: flex; gap: 8px; width: 100%; justify-content: center; }
+.vt-btn {
+  padding: 8px 20px; border: 1px solid rgba(255,255,255,0.3); border-radius: 20px;
+  background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.75);
+  font-size: 0.82rem; font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: all 0.25s; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.vt-btn:hover { background: rgba(255,255,255,0.25); }
+.vt-active { background: rgba(255,255,255,0.92); color: #6C63FF; border-color: transparent; }
+
+/* ── LIST VIEW ── */
+.list-container { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.list-card {
+  background: var(--card-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px; padding: 16px 18px; box-shadow: var(--card-shadow);
+  transition: background 0.3s ease;
+}
+.list-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.list-num {
+  font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
+  background: rgba(128,128,128,0.08); padding: 2px 10px; border-radius: 12px;
+}
+.list-actions { display: flex; gap: 8px; }
+.list-action-btn {
+  background: none; border: none; font-size: 1.05rem; cursor: pointer;
+  padding: 4px; border-radius: 50%; transition: all 0.2s; width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+}
+.list-action-btn:hover { background: rgba(128,128,128,0.1); transform: scale(1.1); }
+.list-quote-text {
+  font-size: 0.9rem; font-weight: 500; color: var(--text-primary);
+  line-height: 1.55; margin-bottom: 4px;
+}
+.list-quote-author { font-size: 0.78rem; color: var(--text-secondary); }
+
+/* ── PAGE INDICATOR ── */
+.page-indicator {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.82rem; font-weight: 600; color: rgba(255,255,255,0.9);
+  min-width: 100px; text-align: center;
+}
+.nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── NEXT / PREV BUTTON ── */
 .nav-row { display: flex; gap: 12px; width: 100%; }
 .nav-btn {
   flex: 1; padding: 14px; border: none; border-radius: 16px;
