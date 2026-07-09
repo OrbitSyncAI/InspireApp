@@ -114,7 +114,22 @@ jobs:
         shell: bash
         run: |
           npm ci --prefer-offline
-          npm install --save-dev "electron@${{ env.ELECTRON_VERSION }}" electron-builder@25.1.8 --prefer-offline --no-fund --no-audit
+          # Retry electron download (GitHub/CDN 504s are common on macOS runners)
+          set +e
+          for attempt in 1 2 3 4 5; do
+            echo "Electron install attempt $attempt..."
+            npm install --save-dev "electron@${{ env.ELECTRON_VERSION }}" electron-builder@25.1.8 --prefer-offline --no-fund --no-audit
+            if [ $? -eq 0 ]; then
+              echo "Electron install succeeded on attempt $attempt"
+              set -e
+              exit 0
+            fi
+            echo "Attempt $attempt failed; sleeping before retry..."
+            sleep $((attempt * 15))
+          done
+          set -e
+          echo "Electron install failed after retries"
+          exit 1
 
       - name: Scaffold Electron main process + builder config
         shell: bash
