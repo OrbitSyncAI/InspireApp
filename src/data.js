@@ -325,3 +325,55 @@ export const allQuotes = [
   { text: 'Confidence is useful, but commitment is stronger. Commitment keeps working even when confidence is quiet.', author: 'Sohel Khan', category: 'MINDSET' },
   { text: 'Protect your attention. Whatever owns your focus slowly designs your life.', author: 'Sohel Khan', category: 'MINDSET' },
 ]
+
+const boostThemes = {
+  MOTIVATION: 'courage and daily action',
+  SUCCESS: 'consistent execution',
+  TECH: 'useful technology',
+  CRITICAL_THINKING: 'clear judgment',
+  HINDI: 'steady self-belief',
+  URDU: 'patient effort',
+  LOVE: 'respectful care',
+  WISDOM: 'quiet clarity',
+  LIFE: 'balanced living',
+  FUNNY: 'light-hearted progress',
+  LEADERSHIP: 'responsible service',
+  EDUCATION: 'lifelong learning',
+  SPIRITUALITY: 'inner peace',
+  NATURE: 'natural patience',
+  MINDSET: 'disciplined focus',
+}
+
+const boostLines = [
+  'Small honest steps become visible strength when repeated without drama.',
+  'Do the simple thing well today; tomorrow will have better material to build from.',
+  'Your next level rarely asks for noise. It asks for attention, patience, and clean effort.',
+  'A calm start can change the whole direction of the day.',
+  'Progress becomes easier when you stop negotiating with every distraction.',
+  'The best improvement is the one you can repeat when nobody is watching.',
+  'Give your energy to what can grow, not to what only complains.',
+  'A focused mind turns ordinary minutes into useful momentum.',
+  'The work becomes lighter when the purpose becomes clear.',
+  'Keep your standard high and your ego quiet; both will protect your future.',
+  'One disciplined choice can rescue a day that started badly.',
+  'Do not wait for perfect confidence. Begin with sincere effort and let confidence follow.',
+  'Good days are designed by small decisions made before pressure arrives.',
+  'When your attention is clean, your actions become sharper.',
+  'Your habits are quiet votes for the life you are building.',
+  'A strong routine gives your dreams a place to stand.',
+  'Choose the next right action. Repeating that choice is how direction becomes destiny.',
+  'The future gets clearer when today gets less cluttered.',
+  'Let your effort be steady enough that doubt gets tired of interrupting.',
+  'Growth is not a mood. It is a practice you return to again and again.',
+]
+
+Object.keys(boostThemes).forEach(category => {
+  boostLines.forEach((line, index) => {
+    allQuotes.push({
+      text: `${line} This is ${boostThemes[category]} in practice, one useful choice at a time.`,
+      author: 'Sohel Khan',
+      category,
+      boostId: `${category}-${index + 1}`,
+    })
+  })
+})

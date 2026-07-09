@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useReducer, useMemo, useRef } from 'react'
+﻿import { useState, useCallback, useEffect, useReducer, useMemo, useRef } from 'react'
 import { categories, gradients, allQuotes, currentYear } from './data'
 import { staticPages } from './pagesContent'
 import { APP_NAME, APP_VERSION, APP_BUILD, RELEASES_PAGE, detectPlatform, platformLabel } from './version'
@@ -80,7 +80,6 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('inspire-favs') || '[]') } catch { return [] }
   })
   const [copied, setCopied] = useState(false)
-  const [scrollY, setScrollY] = useState(0)
   const [dark, setDark] = useState(() => {
     try { return JSON.parse(localStorage.getItem('inspire-dark') || 'false') } catch { return false }
   })
@@ -90,12 +89,9 @@ export default function App() {
   const [listPage, setListPage] = useState(0)
   const [search, setSearch] = useState('')
   const [fontScale, setFontScale] = useState(getFontScale)
-  const [updateBadge, setUpdateBadge] = useState(false)
   const [musicOn, setMusicOn] = useState(false)
   const [musicMode, setMusicMode] = useState(() => localStorage.getItem('inspire-music-mode') || 'calm')
   const [customMusicName, setCustomMusicName] = useState('')
-  const [lastScrollTop, setLastScrollTop] = useState(0)
-  const [chromeHidden, setChromeHidden] = useState(false)
   const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(true)
   const musicRef = useRef(null)
   const customMusicUrlRef = useRef('')
@@ -149,15 +145,6 @@ export default function App() {
   useEffect(() => () => {
     if (musicRef.current) musicRef.current.stop()
     if (customMusicUrlRef.current) URL.revokeObjectURL(customMusicUrlRef.current)
-  }, [])
-
-  // Silent background update check (does not block UI)
-  useEffect(() => {
-    let cancelled = false
-    checkForUpdates().then(r => {
-      if (!cancelled && r.hasUpdate) setUpdateBadge(true)
-    }).catch(() => {})
-    return () => { cancelled = true }
   }, [])
 
   const setTab = useCallback((t) => {
@@ -333,29 +320,24 @@ export default function App() {
     audio.play().then(() => setMusicOn(true)).catch(() => setMusicOn(false))
   }
 
-  const handleMainScroll = (e) => {
-    const top = e.currentTarget.scrollTop
-    setLastScrollTop(top)
-    setScrollY(top)
-  }
-
   const navTo = (p) => {
     setPage(p === 'archive' ? 'quotes' : p)
-    document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' })
+    document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'auto' })
   }
-  const headerScrolled = scrollY > 10
 
   const navItems = [
     { id: 'quotes', label: 'Home', emoji: '🏠' },
     { id: 'daily', label: 'Daily', emoji: '☀️' },
-    { id: 'updates', label: 'Updates', emoji: '🔄', badge: updateBadge },
     { id: 'about', label: 'About Us', emoji: 'ℹ️' },
     { id: 'contact', label: 'Contact', emoji: '📞' },
     { id: 'privacy', label: 'Privacy', emoji: '🔒' },
     { id: 'terms', label: 'Terms', emoji: '📜' },
     { id: 'disclaimer', label: 'Disclaimer', emoji: '⚠️' },
+    { id: 'updates', label: 'Updates', emoji: '🔄' },
   ]
-  const bottomNavItems = navItems.slice(0, 5)
+  const bottomNavItems = ['quotes', 'daily', 'about', 'contact', 'updates']
+    .map(id => navItems.find(item => item.id === id))
+    .filter(Boolean)
 
   return (
     <div className={`app-shell platform-${currentPlatform}`}>
@@ -390,7 +372,7 @@ export default function App() {
         </div>
       </nav>
 
-      <header className={'header' + (headerScrolled ? ' header-scrolled' : '') + (chromeHidden ? ' chrome-hidden' : '')}>
+      <header className="header">
         <div className="header-inner">
           <button className="hamburger" onClick={() => setMenuOpen(true)} aria-label="Menu"><span /><span /><span /></button>
           <svg className="logo-svg" onClick={() => navTo('quotes')} viewBox="0 0 200 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ cursor: 'pointer' }}>
@@ -423,7 +405,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="main-content" onScroll={handleMainScroll}>
+      <main className="main-content">
         {page === 'quotes' ? (
           <div className="app desktop-hero" style={{ background: 'linear-gradient(135deg, ' + g1 + ' 0%, ' + g2 + ' 100%)' }}>
             <div className="container desktop-layout">
@@ -607,7 +589,7 @@ export default function App() {
         ) : page === 'daily' ? (
           <DailyPage quotes={dailyQuotes} navTo={navTo} onFav={(text) => dispatchFav({ type: 'TOGGLE', text })} favorites={favorites} />
         ) : page === 'updates' ? (
-          <UpdatesPage onSeenUpdate={() => setUpdateBadge(false)} />
+          <UpdatesPage />
         ) : (
           <StaticPage page={page} navTo={navTo} />
         )}
@@ -659,7 +641,44 @@ function DailyPage({ quotes, navTo, onFav, favorites }) {
   )
 }
 
-function UpdatesPage({ onSeenUpdate }) {
+function formatBuildLabel(value) {
+  const raw = String(value || '')
+  const parts = raw.split('-')
+  if (parts.length >= 3 && parts[1].length > 10) return `${parts[0]}-${parts[1].slice(0, 7)}-${parts.slice(2).join('-')}`
+  return raw.length > 28 ? `${raw.slice(0, 24)}...` : raw
+}
+
+function cleanReleaseNotes(body = '') {
+  const lines = String(body || '')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+
+  const notes = []
+  for (const line of lines) {
+    if (line.startsWith('|')) continue
+    if (/^-{3,}$/.test(line)) continue
+    if (/^#+\s*/.test(line)) continue
+    if (/^\*\*Commit:\*\*/i.test(line)) continue
+    if (/^\*\*Workflow run:\*\*/i.test(line)) continue
+    if (/^\*\*Full Changelog\*\*/i.test(line)) continue
+    if (/Download platform-specific/i.test(line)) continue
+    const cleaned = line
+      .replace(/^\*\s*/, '')
+      .replace(/\*\*/g, '')
+      .replace(/`/g, '')
+    if (cleaned && !notes.includes(cleaned)) notes.push(cleaned)
+  }
+
+  const friendly = notes.filter(note => !/Platform|Artifact|Included builds/i.test(note))
+  return friendly.length > 0 ? friendly : [
+    'Multi-platform app package is ready.',
+    'Windows, macOS, Linux, Android, iOS, and Web builds were prepared.',
+    'Open the recommended download for this device.',
+  ]
+}
+
+function UpdatesPage() {
   const [status, setStatus] = useState('idle') // idle | loading | done | error
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
@@ -672,15 +691,11 @@ function UpdatesPage({ onSeenUpdate }) {
       const r = await checkForUpdates()
       setResult(r)
       setStatus('done')
-      if (r.hasUpdate) onSeenUpdate?.()
-      else onSeenUpdate?.()
     } catch (e) {
       setError(e.message || 'Update check failed')
       setStatus('error')
     }
   }
-
-  useEffect(() => { runCheck() }, []) // auto-check when opening page
 
   return (
     <div className="static-page">
@@ -695,7 +710,7 @@ function UpdatesPage({ onSeenUpdate }) {
           </div>
           <div>
             <span className="vb-label">Build</span>
-            <strong className="vb-value">{APP_BUILD}</strong>
+            <strong className="vb-value">{formatBuildLabel(APP_BUILD)}</strong>
           </div>
           <div>
             <span className="vb-label">This device</span>
@@ -716,6 +731,13 @@ function UpdatesPage({ onSeenUpdate }) {
           <a className="release-link-btn" href={RELEASES_PAGE} target="_blank" rel="noreferrer">GitHub Releases</a>
         </div>
 
+        {status === 'idle' && (
+          <div className="update-alert update-ok">
+            <p><strong>Manual update check is ready.</strong></p>
+            <p>Tap <strong>Check for Updates</strong> when you want to look for a new release. The app will not show update details before you tap.</p>
+          </div>
+        )}
+
         {status === 'error' && (
           <div className="update-alert update-error">
             <p><strong>Could not check updates.</strong> {error}</p>
@@ -732,7 +754,11 @@ function UpdatesPage({ onSeenUpdate }) {
             {result.hasUpdate && result.release && (
               <>
                 <h2>What’s new — {result.release.name || result.release.tag}</h2>
-                <pre className="changelog">{result.release.body || 'See release notes on GitHub.'}</pre>
+                <ul className="release-notes-list">
+                  {cleanReleaseNotes(result.release.body).map((note, i) => (
+                    <li key={i}>{note}</li>
+                  ))}
+                </ul>
                 <p className="muted-date">Published: {result.release.publishedAt ? new Date(result.release.publishedAt).toLocaleString() : '—'}</p>
 
                 {result.asset ? (
@@ -750,20 +776,6 @@ function UpdatesPage({ onSeenUpdate }) {
                   </div>
                 )}
 
-                {result.allAssets?.length > 0 && (
-                  <>
-                    <h2>All platform files</h2>
-                    <ul className="asset-list">
-                      {result.allAssets.map(a => (
-                        <li key={a.url}>
-                          <button className="linkish" onClick={() => openDownload(a.url)}>
-                            {a.name} {a.size ? `(${formatBytes(a.size)})` : ''}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
               </>
             )}
 

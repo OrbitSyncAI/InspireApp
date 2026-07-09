@@ -49,7 +49,7 @@
   --btn-disabled: #444;
 }
 
-html, body, #root { height: 100%; overflow: hidden; scroll-behavior: smooth; }
+html, body, #root { height: 100%; overflow: hidden; scroll-behavior: auto; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -437,6 +437,7 @@ body {
   border-radius: 12px;
   padding: 14px;
   background: var(--card-bg);
+  min-width: 0;
 }
 .vb-label {
   display: block;
@@ -444,7 +445,11 @@ body {
   font-size: 0.74rem;
   margin-bottom: 4px;
 }
-.vb-value { color: var(--static-heading); }
+.vb-value {
+  color: var(--static-heading);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .vb-new { color: #18A058; }
 .changelog {
   white-space: pre-wrap;
@@ -456,6 +461,14 @@ body {
   color: var(--static-text);
 }
 .asset-list { padding-left: 20px; color: var(--static-text); }
+.release-notes-list {
+  display: grid;
+  gap: 9px;
+  margin: 10px 0 12px;
+  padding-left: 20px;
+  color: var(--static-text);
+  line-height: 1.55;
+}
 .linkish {
   background: none;
   border: 0;
@@ -3090,4 +3103,123 @@ body {
 [data-theme='dark'] .platform-windows .side-cat-active,
 [data-theme='dark'] .platform-windows .windows-ready-box {
   background: rgba(96,165,250,0.14);
+}
+
+/* Mobile speed + update-page overflow fixes */
+.app-shell,
+.main-content,
+.static-page,
+.static-card,
+.updates-card,
+.version-box,
+.download-box,
+.update-alert {
+  min-width: 0;
+}
+
+.main-content,
+.static-page {
+  overflow-x: hidden;
+}
+
+.updates-card,
+.updates-card p,
+.updates-card li,
+.updates-card a,
+.updates-card button,
+.download-box,
+.update-alert,
+.release-notes-list,
+.steps-list {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.platform-android .static-card,
+.platform-ios .static-card {
+  width: 100%;
+  max-width: 100%;
+  contain: layout paint;
+}
+
+.platform-android .version-box,
+.platform-ios .version-box {
+  width: 100%;
+  gap: 8px;
+}
+
+.platform-android .version-box > div,
+.platform-ios .version-box > div {
+  padding: 12px;
+}
+
+.platform-android .updates-card,
+.platform-ios .updates-card {
+  padding: 18px 14px;
+}
+
+.platform-android .updates-card h1,
+.platform-ios .updates-card h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.2;
+}
+
+.platform-android .release-notes-list,
+.platform-ios .release-notes-list {
+  padding-left: 18px;
+}
+
+.platform-android *,
+.platform-ios * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.platform-android .main-content,
+.platform-ios .main-content {
+  scroll-behavior: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+}
+
+.platform-android .header,
+.platform-android .card,
+.platform-android .toolbar-row,
+.platform-android .music-panel,
+.platform-android .list-card,
+.platform-android .static-card,
+.platform-android .android-bottom-nav,
+.platform-ios .header,
+.platform-ios .card,
+.platform-ios .toolbar-row,
+.platform-ios .music-panel,
+.platform-ios .list-card,
+.platform-ios .static-card,
+.platform-ios .ios-tabbar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: none;
+}
+
+.platform-android .card,
+.platform-android .toolbar-row,
+.platform-android .music-panel,
+.platform-android .list-card,
+.platform-android .static-card,
+.platform-ios .card,
+.platform-ios .toolbar-row,
+.platform-ios .music-panel,
+.platform-ios .list-card,
+.platform-ios .static-card {
+  box-shadow: 0 3px 10px rgba(15,23,42,0.06);
+}
+
+.platform-android button,
+.platform-ios button,
+.platform-android .cta-btn,
+.platform-ios .cta-btn {
+  transition: none;
+  touch-action: manipulation;
 }

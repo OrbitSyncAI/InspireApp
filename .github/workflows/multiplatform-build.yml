@@ -495,16 +495,14 @@ jobs:
             **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
             ### Included builds
-            | Platform | Artifact |
-            |----------|----------|
-            | Windows  | NSIS installer (`.exe`) |
-            | macOS    | App bundle zip (`.zip`) |
-            | Linux    | AppImage |
-            | Android  | Debug APK |
-            | iOS      | Unsigned IPA / notes (no Apple signing cert) |
-            | Web      | Vite `dist` bundle (in artifact zip) |
+            - Windows installer: `.exe`
+            - macOS app bundle: `.zip`
+            - Linux desktop app: `.AppImage`
+            - Android app: `.apk`
+            - iOS package: unsigned `.ipa`
+            - Web bundle: browser-ready `dist` files
 
-            Download platform-specific files from **Assets** below, or grab the full multi-platform artifact from the Actions run.
+            Use the app's **Check for Updates** button to show the recommended download for each device.
           draft: false
           prerelease: false
           generate_release_notes: true

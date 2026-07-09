@@ -2,3 +2,4 @@ node_modules
 dist
 dist-builds
 *_job_log*.txt
+preview-server.cjs
