@@ -352,7 +352,6 @@ jobs:
       - name: Add Android in-app updater bridge
         run: |
           mkdir -p android/app/src/main/java/ai/orbitsync/inspireapp
-          mkdir -p android/app/src/main/res/xml
 
           cat > android/app/src/main/java/ai/orbitsync/inspireapp/MainActivity.java << 'EOF'
           package ai.orbitsync.inspireapp;
@@ -382,13 +381,11 @@ jobs:
           import android.net.Uri;
           import android.os.Build;
           import android.os.Environment;
-          import androidx.core.content.FileProvider;
           import com.getcapacitor.JSObject;
           import com.getcapacitor.Plugin;
           import com.getcapacitor.PluginCall;
           import com.getcapacitor.PluginMethod;
           import com.getcapacitor.annotation.CapacitorPlugin;
-          import java.io.File;
 
           @CapacitorPlugin(name = "InspireUpdater")
           public class InspireUpdaterPlugin extends Plugin {
@@ -427,8 +424,8 @@ jobs:
                       int statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
                       int status = statusIndex >= 0 ? cursor.getInt(statusIndex) : DownloadManager.STATUS_FAILED;
                       if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                        File apk = new File(activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName);
-                        openInstaller(activity, apk);
+                        Uri apkUri = manager.getUriForDownloadedFile(downloadId);
+                        openInstaller(activity, apkUri);
                         JSObject ret = new JSObject();
                         ret.put("started", true);
                         call.resolve(ret);
@@ -451,8 +448,7 @@ jobs:
               }
             }
 
-            private void openInstaller(Activity activity, File apk) {
-              Uri uri = FileProvider.getUriForFile(activity, BuildConfig.APPLICATION_ID + ".fileprovider", apk);
+            private void openInstaller(Activity activity, Uri uri) {
               Intent install = new Intent(Intent.ACTION_VIEW);
               install.setDataAndType(uri, "application/vnd.android.package-archive");
               install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -462,13 +458,6 @@ jobs:
           }
           EOF
 
-          cat > android/app/src/main/res/xml/file_paths.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <paths xmlns:android="http://schemas.android.com/apk/res/android">
-            <external-files-path name="updates" path="Download/" />
-          </paths>
-          EOF
-
           node << 'EOF'
           const fs = require('fs');
           const manifestPath = 'android/app/src/main/AndroidManifest.xml';
@@ -476,12 +465,6 @@ jobs:
           if (!xml.includes('android.permission.REQUEST_INSTALL_PACKAGES')) {
             xml = xml.replace('<manifest', '<manifest')
               .replace(/<application/, '    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application');
-          }
-          if (!xml.includes('androidx.core.content.FileProvider')) {
-            xml = xml.replace(
-              '</application>',
-              '        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" /></provider>\n    </application>'
-            );
           }
           fs.writeFileSync(manifestPath, xml);
           EOF
