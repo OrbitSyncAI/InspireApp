@@ -293,6 +293,27 @@ export default function App() {
     document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'auto' })
   }
 
+  const goLikedQuotes = () => {
+    setPage('quotes')
+    setSearch('')
+    setViewMode('card')
+    setTab('LIKED')
+    setIndexWrap(0, 'LIKED')
+    setListPage(0)
+    setMobileCategoriesOpen(false)
+    document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'auto' })
+  }
+
+  const runNavItem = (id) => {
+    if (id === 'quotes') goHomeStart()
+    else if (id === 'liked') goLikedQuotes()
+    else navTo(id)
+  }
+
+  const navItemActive = (id) => (
+    id === 'liked' ? page === 'quotes' && tab === 'LIKED' : page === id
+  )
+
   const goHomeStart = () => {
     setPage('quotes')
     setSearch('')
@@ -307,6 +328,7 @@ export default function App() {
   const navItems = [
     { id: 'quotes', label: 'Home', emoji: '🏠' },
     { id: 'daily', label: 'Daily', emoji: '☀️' },
+    { id: 'liked', label: 'Liked Quotes', emoji: '❤️' },
     { id: 'about', label: 'About Us', emoji: 'ℹ️' },
     { id: 'contact', label: 'Contact', emoji: '📞' },
     { id: 'privacy', label: 'Privacy', emoji: '🔒' },
@@ -328,7 +350,7 @@ export default function App() {
         </div>
         <div className="offcanvas-links">
           {navItems.map(item => (
-            <button key={item.id} className={page === item.id ? 'oc-active' : ''} onClick={() => item.id === 'quotes' ? goHomeStart() : navTo(item.id)}>
+            <button key={item.id} className={navItemActive(item.id) ? 'oc-active' : ''} onClick={() => runNavItem(item.id)}>
               {item.emoji} {item.label}
               {item.badge && <span className="nav-badge">New</span>}
             </button>
@@ -357,7 +379,7 @@ export default function App() {
           <div className="header-actions">
             <nav className="desktop-nav">
               {navItems.map(item => (
-                <button key={item.id} className={page === item.id ? 'dn-active' : ''} onClick={() => item.id === 'quotes' ? goHomeStart() : navTo(item.id)}>
+                <button key={item.id} className={navItemActive(item.id) ? 'dn-active' : ''} onClick={() => runNavItem(item.id)}>
                   {item.label}
                   {item.badge && <span className="nav-badge-dot" />}
                 </button>
@@ -563,7 +585,7 @@ export default function App() {
       {(currentPlatform === 'android' || currentPlatform === 'ios') && (
         <nav className={currentPlatform === 'ios' ? 'ios-tabbar' : 'android-bottom-nav'} aria-label={`${currentPlatform} bottom navigation`}>
           {bottomNavItems.map(item => (
-            <button key={item.id} className={page === item.id ? (currentPlatform === 'ios' ? 'ios-tab-active' : 'android-nav-active') : ''} onClick={() => item.id === 'quotes' ? goHomeStart() : navTo(item.id)}>
+            <button key={item.id} className={navItemActive(item.id) ? (currentPlatform === 'ios' ? 'ios-tab-active' : 'android-nav-active') : ''} onClick={() => runNavItem(item.id)}>
               <span>{item.emoji}</span>
               <small>{item.label}</small>
               {item.badge && <i />}
@@ -743,7 +765,7 @@ function UpdatesPage() {
                   <div className="download-box">
                     <p>Recommended for <strong>{platformLabel(result.platform)}</strong>:</p>
                     <button className="cta-btn" onClick={() => openDownload(result.asset.url, result.asset.name)}>
-                      ⬇️ Download & Update
+                      ⬇️ Download & Update v{result.latestVersion}
                     </button>
                     <p className="small-note">On Android, the app downloads the update inside the app and then shows the system install prompt. Windows, macOS, Linux, and iOS still use the operating-system installer rules for final installation.</p>
                   </div>

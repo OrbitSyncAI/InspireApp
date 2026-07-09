@@ -3266,6 +3266,20 @@ button,
   touch-action: manipulation;
 }
 
+.card,
+.list-card,
+.daily-quote-card,
+.static-section,
+.download-box,
+.update-alert {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 220px;
+}
+
+.quote-card-lg {
+  contain: layout paint;
+}
+
 .platform-windows .main-content,
 .platform-macos .main-content,
 .platform-linux .main-content,

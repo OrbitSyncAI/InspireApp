@@ -103,7 +103,7 @@ export function formatBytes(bytes) {
 
 export async function openDownload(url, fileName = '') {
   if (!url) return
-  const nativeUpdater = window.Capacitor?.Plugins?.InspireUpdater
+  const nativeUpdater = window.Capacitor?.Plugins?.InspireUpdater || window.InspireUpdater
   if (nativeUpdater?.downloadAndInstall) {
     await nativeUpdater.downloadAndInstall({
       url,
