@@ -325,6 +325,17 @@ export default function App() {
     document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'auto' })
   }
 
+  const goHomeStart = () => {
+    setPage('quotes')
+    setSearch('')
+    setViewMode('card')
+    setTab('MOTIVATION')
+    setIndexWrap(0, 'MOTIVATION')
+    setListPage(0)
+    setMobileCategoriesOpen(true)
+    document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'auto' })
+  }
+
   const navItems = [
     { id: 'quotes', label: 'Home', emoji: '🏠' },
     { id: 'daily', label: 'Daily', emoji: '☀️' },
@@ -349,7 +360,7 @@ export default function App() {
         </div>
         <div className="offcanvas-links">
           {navItems.map(item => (
-            <button key={item.id} className={page === item.id ? 'oc-active' : ''} onClick={() => navTo(item.id)}>
+            <button key={item.id} className={page === item.id ? 'oc-active' : ''} onClick={() => item.id === 'quotes' ? goHomeStart() : navTo(item.id)}>
               {item.emoji} {item.label}
               {item.badge && <span className="nav-badge">New</span>}
             </button>
@@ -375,7 +386,7 @@ export default function App() {
       <header className="header">
         <div className="header-inner">
           <button className="hamburger" onClick={() => setMenuOpen(true)} aria-label="Menu"><span /><span /><span /></button>
-          <svg className="logo-svg" onClick={() => navTo('quotes')} viewBox="0 0 200 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ cursor: 'pointer' }}>
+          <svg className="logo-svg" onClick={goHomeStart} viewBox="0 0 200 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ cursor: 'pointer' }}>
             <defs>
               <linearGradient id="lgGrad" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor="#667EEA" /><stop offset="100%" stopColor="#F093FB" />
@@ -388,7 +399,7 @@ export default function App() {
           <div className="header-actions">
             <nav className="desktop-nav">
               {navItems.map(item => (
-                <button key={item.id} className={page === item.id ? 'dn-active' : ''} onClick={() => navTo(item.id)}>
+                <button key={item.id} className={page === item.id ? 'dn-active' : ''} onClick={() => item.id === 'quotes' ? goHomeStart() : navTo(item.id)}>
                   {item.label}
                   {item.badge && <span className="nav-badge-dot" />}
                 </button>
@@ -598,7 +609,7 @@ export default function App() {
       {(currentPlatform === 'android' || currentPlatform === 'ios') && (
         <nav className={currentPlatform === 'ios' ? 'ios-tabbar' : 'android-bottom-nav'} aria-label={`${currentPlatform} bottom navigation`}>
           {bottomNavItems.map(item => (
-            <button key={item.id} className={page === item.id ? (currentPlatform === 'ios' ? 'ios-tab-active' : 'android-nav-active') : ''} onClick={() => navTo(item.id)}>
+            <button key={item.id} className={page === item.id ? (currentPlatform === 'ios' ? 'ios-tab-active' : 'android-nav-active') : ''} onClick={() => item.id === 'quotes' ? goHomeStart() : navTo(item.id)}>
               <span>{item.emoji}</span>
               <small>{item.label}</small>
               {item.badge && <i />}
@@ -678,6 +689,19 @@ function cleanReleaseNotes(body = '') {
   ]
 }
 
+async function notifyUpdateAvailable(result) {
+  if (!result?.hasUpdate || typeof window === 'undefined' || !('Notification' in window)) return
+  try {
+    let permission = Notification.permission
+    if (permission === 'default') permission = await Notification.requestPermission()
+    if (permission !== 'granted') return
+    new Notification('InspireApp update available', {
+      body: `Version ${result.latestVersion} is ready for ${platformLabel(result.platform)}.`,
+      tag: `inspire-update-${result.latestVersion}`,
+    })
+  } catch {}
+}
+
 function UpdatesPage() {
   const [status, setStatus] = useState('idle') // idle | loading | done | error
   const [result, setResult] = useState(null)
@@ -691,6 +715,7 @@ function UpdatesPage() {
       const r = await checkForUpdates()
       setResult(r)
       setStatus('done')
+      notifyUpdateAvailable(r)
     } catch (e) {
       setError(e.message || 'Update check failed')
       setStatus('error')
@@ -701,7 +726,7 @@ function UpdatesPage() {
     <div className="static-page">
       <div className="static-card updates-card">
         <h1>🔄 App Updates</h1>
-        <p>Check for new builds published on GitHub Releases. When a new release is published after your push, every device can see it here and download the matching installer.</p>
+        <p>Updates are checked only when you tap the button below. The app will not look for releases or show update details automatically.</p>
 
         <div className="version-box">
           <div>
@@ -728,13 +753,12 @@ function UpdatesPage() {
           <button className="cta-btn update-check-btn" onClick={runCheck} disabled={status === 'loading'}>
             {status === 'loading' ? 'Checking…' : '🔄 Check for Updates'}
           </button>
-          <a className="release-link-btn" href={RELEASES_PAGE} target="_blank" rel="noreferrer">GitHub Releases</a>
         </div>
 
         {status === 'idle' && (
           <div className="update-alert update-ok">
             <p><strong>Manual update check is ready.</strong></p>
-            <p>Tap <strong>Check for Updates</strong> when you want to look for a new release. The app will not show update details before you tap.</p>
+            <p>Tap <strong>Check for Updates</strong> when you want to look for a new release. No automatic check runs in the background.</p>
           </div>
         )}
 
@@ -765,13 +789,13 @@ function UpdatesPage() {
                   <div className="download-box">
                     <p>Recommended for <strong>{platformLabel(result.platform)}</strong>:</p>
                     <button className="cta-btn" onClick={() => openDownload(result.asset.url)}>
-                      ⬇️ Download {result.asset.name} {result.asset.size ? `(${formatBytes(result.asset.size)})` : ''}
+                      ⬇️ Download & Update {result.asset.name} {result.asset.size ? `(${formatBytes(result.asset.size)})` : ''}
                     </button>
-                    <p className="small-note">After download, install/open the file on this device. Reopen the app — the version number will change to the new release.</p>
+                    <p className="small-note">For Windows, macOS, Linux, and Android, the app opens the matching installer/package from here. iOS updates still require opening the IPA through your normal iOS install/signing method. After install, reopen the app and the version number will change.</p>
                   </div>
                 ) : (
                   <div className="download-box">
-                    <p>No direct installer matched this device automatically. Download from the full release page or pick an asset below.</p>
+                    <p>No direct installer matched this device automatically.</p>
                     <a className="cta-btn" href={result.release.htmlUrl || RELEASES_PAGE} target="_blank" rel="noreferrer">Open release page</a>
                   </div>
                 )}
@@ -790,8 +814,9 @@ function UpdatesPage() {
           <li>You push code and run the multi-platform build pipeline.</li>
           <li>A GitHub Release is created with Windows / macOS / Linux / Android / iOS files.</li>
           <li>Users open <strong>Updates</strong> → <strong>Check for Updates</strong>.</li>
-          <li>App shows new <strong>version number</strong>, <strong>changelog</strong>, and download for their device.</li>
-          <li>After installing the new build, the installed version shown here updates automatically.</li>
+          <li>The app shows the new <strong>version number</strong>, clean release notes, and the recommended update file for that device.</li>
+          <li>Operating systems do not allow every app to silently replace itself. The update starts from inside this app, then the system installer finishes it.</li>
+          <li>After installing the new build, reopen the app and the installed version shown here changes.</li>
         </ol>
         <a className="phone-link" href={RELEASES_PAGE} target="_blank" rel="noreferrer">Browse all releases →</a>
       </div>
