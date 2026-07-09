@@ -81,7 +81,7 @@ jobs:
           - runner: macos-latest
             os-name: macOS
             platform: mac
-            artifact-name: macos-dmg
+            artifact-name: macos-zip
 
           - runner: ubuntu-latest
             os-name: Linux
@@ -206,14 +206,12 @@ jobs:
             shortcutName: InspireApp
           mac:
             target:
-              - target: dmg
+              - target: zip
                 arch: [x64, arm64]
             artifactName: InspireApp-${version}-mac.${ext}
             identity: null
             hardenedRuntime: false
             gatekeeperAssess: false
-          dmg:
-            title: InspireApp ${version}
           linux:
             target:
               - target: AppImage
@@ -455,7 +453,7 @@ jobs:
           find all-builds -type f | sort || true
 
           cp -r all-builds/windows-exe/* release-bundle/windows/ 2>/dev/null || true
-          cp -r all-builds/macos-dmg/* release-bundle/macos/ 2>/dev/null || true
+          cp -r all-builds/macos-zip/* release-bundle/macos/ 2>/dev/null || true
           cp -r all-builds/linux-appimage/* release-bundle/linux/ 2>/dev/null || true
           cp -r all-builds/android-apk/* release-bundle/android/ 2>/dev/null || true
           cp -r all-builds/ios-ipa/* release-bundle/ios/ 2>/dev/null || true
@@ -500,7 +498,7 @@ jobs:
             | Platform | Artifact |
             |----------|----------|
             | Windows  | NSIS installer (`.exe`) |
-            | macOS    | Disk image (`.dmg`) |
+            | macOS    | App bundle zip (`.zip`) |
             | Linux    | AppImage |
             | Android  | Debug APK |
             | iOS      | Unsigned IPA / notes (no Apple signing cert) |
