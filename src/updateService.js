@@ -105,11 +105,13 @@ export async function openDownload(url, fileName = '') {
   if (!url) return
   const nativeUpdater = window.Capacitor?.Plugins?.InspireUpdater || window.InspireUpdater
   if (nativeUpdater?.downloadAndInstall) {
-    await nativeUpdater.downloadAndInstall({
+    Promise.resolve(nativeUpdater.downloadAndInstall({
       url,
       fileName: fileName || 'InspireApp-update.apk',
+    })).catch(error => {
+      console.error('Update download failed', error)
     })
-    return
+    return { started: true, native: true }
   }
 
   const link = document.createElement('a')
@@ -119,4 +121,5 @@ export async function openDownload(url, fileName = '') {
   document.body.appendChild(link)
   link.click()
   link.remove()
+  return { started: true, native: false }
 }

@@ -515,6 +515,80 @@ body {
   align-items: center;
 }
 
+.ai-page {
+  display: grid;
+  gap: 16px;
+}
+.ai-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--static-border);
+  border-radius: 14px;
+  background: var(--card-bg);
+}
+.ai-default-row,
+.ai-chatbar,
+.ai-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.ai-provider-grid,
+.ai-results {
+  display: grid;
+  gap: 10px;
+}
+.ai-provider-card,
+.ai-quote-card,
+.ai-chatbox {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--static-border);
+  border-radius: 12px;
+  background: var(--static-bg);
+}
+.ai-provider-card input,
+.ai-default-row select,
+.ai-chatbar select,
+.ai-chatbox textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--static-border);
+  border-radius: 10px;
+  background: var(--body-bg);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font: inherit;
+}
+.ai-default-row label { font-weight: 800; color: var(--static-heading); }
+.ai-default-row select,
+.ai-chatbar select { flex: 1 1 160px; }
+.ai-quote-card p { margin: 0; color: var(--static-text); }
+.ai-quote-card small { color: var(--text-secondary); }
+.ai-actions button {
+  border: 1px solid var(--static-border);
+  border-radius: 999px;
+  background: var(--body-bg);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.ai-error {
+  color: #DC2626 !important;
+  font-weight: 700;
+}
+
+@media (min-width: 760px) {
+  .ai-provider-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* ── FOOTER ── */
 .footer {
   flex-shrink: 0; padding: 14px 16px; text-align: center;

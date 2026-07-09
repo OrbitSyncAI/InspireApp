@@ -6,6 +6,13 @@ import { checkForUpdates, openDownload } from './updateService'
 
 const tabKeys = Object.keys(categories).filter(k => k !== 'LIKED')
 const PER_PAGE = 10
+const AI_SETTINGS_KEY = 'inspire-ai-settings'
+const AI_SAVED_KEY = 'inspire-ai-saved-quotes'
+const AI_PROVIDERS = {
+  gemini: { label: 'Gemini', defaultModel: 'gemini-1.5-flash' },
+  openai: { label: 'ChatGPT', defaultModel: 'gpt-4o-mini' },
+  claude: { label: 'Claude', defaultModel: 'claude-3-5-haiku-20241022' },
+}
 
 function favReducer(state, action) {
   switch (action.type) {
@@ -25,49 +32,67 @@ function dailyQuoteIndex() {
   return key % Math.max(allQuotes.length, 1)
 }
 
-function createAmbientMusic(mode = 'calm') {
-  const AudioContext = window.AudioContext || window.webkitAudioContext
-  if (!AudioContext) return null
-  const ctx = new AudioContext()
-  const master = ctx.createGain()
-  master.gain.value = 0.038
-  master.connect(ctx.destination)
-  const presets = {
-    calm: { notes: [261.63, 329.63, 392], types: ['sine', 'triangle', 'triangle'] },
-    focus: { notes: [220, 330, 440], types: ['triangle', 'sine', 'triangle'] },
-    rain: { notes: [174.61, 261.63, 349.23], types: ['sine', 'sine', 'triangle'] },
+function loadAiSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) || '{}')
+    return {
+      defaultProvider: saved.defaultProvider || 'gemini',
+      providers: {
+        gemini: { apiKey: '', model: AI_PROVIDERS.gemini.defaultModel, ...(saved.providers?.gemini || {}) },
+        openai: { apiKey: '', model: AI_PROVIDERS.openai.defaultModel, ...(saved.providers?.openai || {}) },
+        claude: { apiKey: '', model: AI_PROVIDERS.claude.defaultModel, ...(saved.providers?.claude || {}) },
+      },
+    }
+  } catch {
+    return {
+      defaultProvider: 'gemini',
+      providers: Object.fromEntries(Object.entries(AI_PROVIDERS).map(([key, meta]) => [key, { apiKey: '', model: meta.defaultModel }])),
+    }
   }
-  const selected = presets[mode] || presets.calm
-  const lfo = ctx.createOscillator()
-  const lfoGain = ctx.createGain()
-  lfo.frequency.value = mode === 'focus' ? 0.18 : 0.08
-  lfoGain.gain.value = mode === 'rain' ? 0.012 : 0.006
-  lfo.connect(lfoGain)
-  lfoGain.connect(master.gain)
-  lfo.start()
-  const oscillators = selected.notes.map((freq, i) => {
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.type = selected.types[i]
-    osc.frequency.value = freq
-    gain.gain.value = i === 0 ? 0.42 : 0.2
-    osc.connect(gain)
-    gain.connect(master)
-    osc.start()
-    return osc
+}
+
+function loadSavedAiQuotes() {
+  try { return JSON.parse(localStorage.getItem(AI_SAVED_KEY) || '[]') } catch { return [] }
+}
+
+function downloadQuoteImage(quote, label = 'Inspire') {
+  if (!quote) return
+  const canvas = document.createElement('canvas')
+  canvas.width = 1080
+  canvas.height = 1350
+  const ctx = canvas.getContext('2d')
+  const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height)
+  grad.addColorStop(0, '#667EEA')
+  grad.addColorStop(1, '#F5576C')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = 'rgba(255,255,255,0.16)'
+  ctx.fillRect(70, 90, 940, 1170)
+  ctx.fillStyle = '#FFFFFF'
+  ctx.textAlign = 'center'
+  ctx.font = '800 54px system-ui, sans-serif'
+  ctx.fillText(label, 540, 190)
+  ctx.font = '600 50px system-ui, sans-serif'
+  const words = String(quote.text || '').split(/\s+/)
+  let line = ''
+  let y = 430
+  words.forEach(word => {
+    const test = line ? `${line} ${word}` : word
+    if (ctx.measureText(test).width > 830) {
+      ctx.fillText(line, 540, y)
+      line = word
+      y += 70
+    } else {
+      line = test
+    }
   })
-  return {
-    stop() {
-      master.gain.setTargetAtTime(0, ctx.currentTime, 0.08)
-      setTimeout(() => {
-        try { lfo.stop() } catch {}
-        oscillators.forEach(osc => {
-          try { osc.stop() } catch {}
-        })
-        try { ctx.close() } catch {}
-      }, 250)
-    },
-  }
+  if (line) ctx.fillText(line, 540, y)
+  ctx.font = '500 40px system-ui, sans-serif'
+  ctx.fillText(`— ${quote.author || 'AI'}`, 540, Math.min(y + 110, 1120))
+  const link = document.createElement('a')
+  link.href = canvas.toDataURL('image/png')
+  link.download = 'inspire-quote.png'
+  link.click()
 }
 
 export default function App() {
@@ -85,12 +110,9 @@ export default function App() {
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('inspire-view') || 'card')
   const [listPage, setListPage] = useState(0)
   const [search, setSearch] = useState('')
-  const [musicOn, setMusicOn] = useState(false)
-  const [musicMode, setMusicMode] = useState(() => localStorage.getItem('inspire-music-mode') || 'calm')
-  const [customMusicName, setCustomMusicName] = useState('')
+  const [aiSettings, setAiSettings] = useState(loadAiSettings)
+  const [savedAiQuotes, setSavedAiQuotes] = useState(loadSavedAiQuotes)
   const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(true)
-  const musicRef = useRef(null)
-  const customMusicUrlRef = useRef('')
   const categoryTapRef = useRef({ key: '', time: 0 })
 
   const allFiltered = useMemo(() => {
@@ -129,16 +151,13 @@ export default function App() {
   useEffect(() => { localStorage.setItem('inspire-page', page) }, [page])
   useEffect(() => { localStorage.setItem('inspire-tab', tab) }, [tab])
   useEffect(() => { localStorage.setItem('inspire-view', viewMode) }, [viewMode])
-  useEffect(() => { localStorage.setItem('inspire-music-mode', musicMode) }, [musicMode])
+  useEffect(() => { localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings)) }, [aiSettings])
+  useEffect(() => { localStorage.setItem(AI_SAVED_KEY, JSON.stringify(savedAiQuotes)) }, [savedAiQuotes])
   useEffect(() => { document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light') }, [dark])
   useEffect(() => { if (page === 'archive') setPage('quotes') }, [page])
   useEffect(() => { setMenuOpen(false) }, [page, tab])
   useEffect(() => { if (copied) { const t = setTimeout(() => setCopied(false), 2200); return () => clearTimeout(t) } }, [copied])
   useEffect(() => { setListPage(0); setIndex(0) }, [tab, search])
-  useEffect(() => () => {
-    if (musicRef.current) musicRef.current.stop()
-    if (customMusicUrlRef.current) URL.revokeObjectURL(customMusicUrlRef.current)
-  }, [])
 
   const setTab = useCallback((t) => {
     setTabState(t)
@@ -244,49 +263,6 @@ export default function App() {
   const prevListPage = () => setListPage(p => Math.max(0, p - 1))
   const nextListPage = () => setListPage(p => Math.min(totalPages - 1, p + 1))
 
-  const toggleMusic = () => {
-    if (musicOn) {
-      if (musicRef.current) musicRef.current.stop()
-      musicRef.current = null
-      setMusicOn(false)
-      return
-    }
-    const player = createAmbientMusic(musicMode)
-    if (player) {
-      musicRef.current = player
-      setMusicOn(true)
-    }
-  }
-
-  const changeMusicMode = (mode) => {
-    setMusicMode(mode)
-    if (!musicOn) return
-    if (musicRef.current) musicRef.current.stop()
-    const player = createAmbientMusic(mode)
-    if (player) musicRef.current = player
-  }
-
-  const handleMusicUpload = (event) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (musicRef.current) musicRef.current.stop()
-    if (customMusicUrlRef.current) URL.revokeObjectURL(customMusicUrlRef.current)
-    const url = URL.createObjectURL(file)
-    const audio = new Audio(url)
-    audio.loop = true
-    audio.volume = 0.45
-    customMusicUrlRef.current = url
-    musicRef.current = {
-      stop() {
-        audio.pause()
-        audio.currentTime = 0
-      },
-    }
-    setCustomMusicName(file.name)
-    setMusicMode('custom')
-    audio.play().then(() => setMusicOn(true)).catch(() => setMusicOn(false))
-  }
-
   const navTo = (p) => {
     setPage(p === 'archive' ? 'quotes' : p)
     document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'auto' })
@@ -328,6 +304,7 @@ export default function App() {
     { id: 'quotes', label: 'Home', emoji: '🏠' },
     { id: 'daily', label: 'Daily', emoji: '☀️' },
     { id: 'liked', label: 'Liked Quotes', emoji: '❤️' },
+    { id: 'ai', label: 'AI Quotes', emoji: '🤖' },
     { id: 'about', label: 'About Us', emoji: 'ℹ️' },
     { id: 'contact', label: 'Contact', emoji: '📞' },
     { id: 'privacy', label: 'Privacy', emoji: '🔒' },
@@ -477,25 +454,8 @@ export default function App() {
                     <div className="view-toggle">
                       <button className={'vt-btn' + (viewMode === 'card' ? ' vt-active' : '')} onClick={() => setViewMode('card')}>🃏 Card</button>
                       <button className={'vt-btn' + (viewMode === 'list' ? ' vt-active' : '')} onClick={() => setViewMode('list')}>📋 List</button>
-                      <button className={'vt-btn music-btn' + (musicOn ? ' music-on' : '')} onClick={toggleMusic}>
-                        {musicOn ? 'Music On' : 'Music Off'}
-                      </button>
                     </div>
                   )}
-                </div>
-
-                <div className="music-panel">
-                  <span>Music</span>
-                  {['calm', 'focus', 'rain'].map(mode => (
-                    <button key={mode} className={musicMode === mode ? 'music-chip music-chip-active' : 'music-chip'} onClick={() => changeMusicMode(mode)}>
-                      {mode[0].toUpperCase() + mode.slice(1)}
-                    </button>
-                  ))}
-                  <label className="music-upload">
-                    Upload
-                    <input type="file" accept="audio/*" onChange={handleMusicUpload} />
-                  </label>
-                  {customMusicName && <small>{customMusicName}</small>}
                 </div>
 
                 {allFiltered.length === 0 ? (
@@ -518,6 +478,7 @@ export default function App() {
                         </button>
                         <button className="action-btn" onClick={copyQuote} title="Copy quote only">📋</button>
                         <button className="action-btn" onClick={shareQuote} title="Share">📤</button>
+                        <button className="action-btn" onClick={() => downloadQuoteImage(quote)} title="Download image">🖼️</button>
                       </div>
                       {copied && <p className="copied-feedback" style={{ color: g1 }}>✅ Copied!</p>}
                       {tab === 'LIKED' && favorites.length > 0 && (
@@ -550,6 +511,7 @@ export default function App() {
                                   {qIsFav ? '❤️' : '🤍'}
                                 </button>
                                 <button className="list-action-btn" onClick={() => copyListQuote(q.text)} title="Copy">📋</button>
+                                <button className="list-action-btn" onClick={() => downloadQuoteImage(q)} title="Download image">🖼️</button>
                                 {tab === 'LIKED' && (
                                   <button className="list-remove-btn" onClick={() => removeFavInline(q.text)}>Remove</button>
                                 )}
@@ -574,6 +536,15 @@ export default function App() {
           </div>
         ) : page === 'daily' ? (
           <DailyPage quotes={dailyQuotes} navTo={navTo} onFav={(text) => dispatchFav({ type: 'TOGGLE', text })} favorites={favorites} />
+        ) : page === 'ai' ? (
+          <AiQuotesPage
+            settings={aiSettings}
+            setSettings={setAiSettings}
+            savedQuotes={savedAiQuotes}
+            setSavedQuotes={setSavedAiQuotes}
+            onFav={(text) => dispatchFav({ type: 'TOGGLE', text })}
+            favorites={favorites}
+          />
         ) : page === 'updates' ? (
           <UpdatesPage />
         ) : (
@@ -616,6 +587,7 @@ function DailyPage({ quotes, navTo, onFav, favorites }) {
                 <div className="daily-actions">
                   <button className="cta-btn" onClick={() => onFav(quote.text)}>{isFav ? '❤️ Liked' : '🤍 Like'}</button>
                   <button className="cta-btn cta-secondary" onClick={() => copy(quote.text)}>📋 Copy</button>
+                  <button className="cta-btn cta-secondary" onClick={() => downloadQuoteImage(quote)}>🖼️ Image</button>
                 </div>
               </article>
             )
@@ -664,6 +636,182 @@ function cleanReleaseNotes(body = '') {
   ]
 }
 
+function parseAiQuotes(raw) {
+  const cleaned = String(raw || '').replace(/```json|```/g, '').trim()
+  try {
+    const parsed = JSON.parse(cleaned)
+    const arr = Array.isArray(parsed) ? parsed : parsed.quotes
+    if (Array.isArray(arr)) return arr.map(item => typeof item === 'string' ? item : item.text).filter(Boolean).slice(0, 5)
+  } catch {}
+  return cleaned
+    .split(/\n+/)
+    .map(line => line.replace(/^\s*[-*\d.)"]+\s*/, '').replace(/"$/,'').trim())
+    .filter(line => line.length > 8)
+    .slice(0, 5)
+}
+
+async function callAiProvider(provider, config, prompt) {
+  const key = config?.apiKey?.trim()
+  const model = config?.model?.trim() || AI_PROVIDERS[provider]?.defaultModel
+  if (!key) throw new Error(`Please add ${AI_PROVIDERS[provider]?.label || provider} API key first.`)
+
+  if (provider === 'gemini') {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+    })
+    if (!res.ok) throw new Error(`Gemini error ${res.status}`)
+    const json = await res.json()
+    return json.candidates?.[0]?.content?.parts?.map(p => p.text).join('\n') || ''
+  }
+
+  if (provider === 'openai') {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.8 }),
+    })
+    if (!res.ok) throw new Error(`ChatGPT error ${res.status}`)
+    const json = await res.json()
+    return json.choices?.[0]?.message?.content || ''
+  }
+
+  if (provider === 'claude') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model, max_tokens: 800, messages: [{ role: 'user', content: prompt }] }),
+    })
+    if (!res.ok) throw new Error(`Claude error ${res.status}`)
+    const json = await res.json()
+    return json.content?.map(part => part.text).join('\n') || ''
+  }
+  throw new Error('Unknown AI provider')
+}
+
+function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFav, favorites }) {
+  const [provider, setProvider] = useState(settings.defaultProvider)
+  const [language, setLanguage] = useState('Hindi')
+  const [idea, setIdea] = useState('')
+  const [generated, setGenerated] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => { setProvider(settings.defaultProvider) }, [settings.defaultProvider])
+
+  const updateProvider = (key, patch) => {
+    setSettings(prev => ({
+      ...prev,
+      providers: {
+        ...prev.providers,
+        [key]: { ...prev.providers[key], ...patch },
+      },
+    }))
+  }
+
+  const generate = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      const config = settings.providers[provider]
+      const prompt = `Generate exactly 5 original, short, powerful quotes in ${language}. Topic/idea: ${idea || 'motivation and life growth'}. Return only a JSON array of strings, no explanation.`
+      const raw = await callAiProvider(provider, config, prompt)
+      const quotes = parseAiQuotes(raw).map(text => ({ text, author: 'AI', provider }))
+      setGenerated(quotes)
+    } catch (e) {
+      setError(e.message || 'AI quote generation failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const copy = (text) => navigator.clipboard.writeText(text).catch(() => {})
+  const saveQuote = (quote) => {
+    setSavedQuotes(prev => prev.some(q => q.text === quote.text) ? prev : [{ ...quote, savedAt: new Date().toISOString() }, ...prev])
+  }
+
+  return (
+    <div className="static-page">
+      <div className="static-card static-wide ai-page">
+        <h1>🤖 AI Quotes</h1>
+        <p>Choose your default AI, add API keys on this device, select a language, then generate top 5 quotes. Saved AI quotes stay inside this app.</p>
+
+        <section className="ai-section">
+          <h2>AI API Settings</h2>
+          <div className="ai-default-row">
+            <label>Default AI</label>
+            <select value={settings.defaultProvider} onChange={e => setSettings(prev => ({ ...prev, defaultProvider: e.target.value }))}>
+              {Object.entries(AI_PROVIDERS).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
+            </select>
+          </div>
+          <div className="ai-provider-grid">
+            {Object.entries(AI_PROVIDERS).map(([key, meta]) => (
+              <div key={key} className="ai-provider-card">
+                <strong>{meta.label}</strong>
+                <input type="password" placeholder={`${meta.label} API key`} value={settings.providers[key]?.apiKey || ''} onChange={e => updateProvider(key, { apiKey: e.target.value })} />
+                <input placeholder="Model" value={settings.providers[key]?.model || meta.defaultModel} onChange={e => updateProvider(key, { model: e.target.value })} />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="ai-section">
+          <h2>{AI_PROVIDERS[provider]?.label} Quote Generator</h2>
+          <div className="ai-chatbox">
+            <div className="ai-chatbar">
+              <select value={provider} onChange={e => setProvider(e.target.value)}>
+                {Object.entries(AI_PROVIDERS).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
+              </select>
+              <select value={language} onChange={e => setLanguage(e.target.value)}>
+                {['Hindi', 'English', 'Urdu', 'Hinglish', 'Arabic', 'Spanish', 'French'].map(lang => <option key={lang}>{lang}</option>)}
+              </select>
+            </div>
+            <textarea value={idea} onChange={e => setIdea(e.target.value)} rows={4} placeholder="Write your idea, topic, mood, or audience..." />
+            <button className="cta-btn" disabled={busy} onClick={generate}>{busy ? 'Generating...' : 'Generate Top 5 Quotes'}</button>
+            {error && <p className="ai-error">{error}</p>}
+          </div>
+
+          <div className="ai-results">
+            {generated.map((quote, i) => {
+              const liked = favorites.includes(quote.text)
+              return (
+                <article key={`${quote.text}-${i}`} className="ai-quote-card">
+                  <p>{quote.text}</p>
+                  <small>— AI · {AI_PROVIDERS[quote.provider]?.label}</small>
+                  <div className="ai-actions">
+                    <button onClick={() => onFav(quote.text)}>{liked ? '❤️ Liked' : '🤍 Like'}</button>
+                    <button onClick={() => saveQuote(quote)}>Save</button>
+                    <button onClick={() => copy(quote.text)}>Copy</button>
+                    <button onClick={() => downloadQuoteImage(quote, 'AI Quote')}>Image</button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="ai-section">
+          <h2>Saved AI Quotes</h2>
+          <div className="ai-results">
+            {savedQuotes.length === 0 ? <p>No AI quotes saved yet.</p> : savedQuotes.map((quote, i) => (
+              <article key={`${quote.text}-${i}`} className="ai-quote-card">
+                <p>{quote.text}</p>
+                <small>— AI</small>
+                <div className="ai-actions">
+                  <button onClick={() => copy(quote.text)}>Copy</button>
+                  <button onClick={() => downloadQuoteImage(quote, 'AI Quote')}>Image</button>
+                  <button onClick={() => setSavedQuotes(prev => prev.filter((_, idx) => idx !== i))}>Remove</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
 async function notifyUpdateAvailable(result) {
   if (!result?.hasUpdate || typeof window === 'undefined' || !('Notification' in window)) return
   try {
@@ -683,6 +831,7 @@ function UpdatesPage() {
   const [error, setError] = useState('')
   const [pendingUpdate, setPendingUpdate] = useState(null)
   const [installing, setInstalling] = useState(false)
+  const [updateNotice, setUpdateNotice] = useState('')
   const platform = detectPlatform()
 
   const runCheck = async () => {
@@ -746,6 +895,12 @@ function UpdatesPage() {
             <a className="phone-link" href={RELEASES_PAGE} target="_blank" rel="noreferrer">Open GitHub Releases</a>
           </div>
         )}
+        {updateNotice && (
+          <div className="update-alert update-ok">
+            <p><strong>{updateNotice}</strong></p>
+            <p>If Android asks permission to install unknown apps, allow InspireApp once and continue the update.</p>
+          </div>
+        )}
 
         {status === 'done' && result && (
           <div className={'update-alert ' + (result.hasUpdate ? 'update-available' : 'update-ok')}>
@@ -798,16 +953,24 @@ function UpdatesPage() {
         <a className="phone-link" href={RELEASES_PAGE} target="_blank" rel="noreferrer">Browse all releases →</a>
       </div>
       {pendingUpdate?.asset && (
-        <div className="update-modal-backdrop" onClick={() => !installing && setPendingUpdate(null)}>
+        <div className="update-modal-backdrop" onClick={() => setPendingUpdate(null)}>
           <div className="update-modal" onClick={e => e.stopPropagation()}>
             <h2>Update to v{pendingUpdate.latestVersion}</h2>
             <p>InspireApp will download the recommended update for <strong>{platformLabel(pendingUpdate.platform)}</strong>. Android and desktop builds start the download from inside the app, then the system installer asks for final permission.</p>
             <div className="update-modal-actions">
-              <button className="cta-btn cta-secondary" disabled={installing} onClick={() => setPendingUpdate(null)}>Cancel</button>
+              <button className="cta-btn cta-secondary" onClick={() => setPendingUpdate(null)}>Cancel</button>
               <button className="cta-btn" disabled={installing} onClick={async () => {
                 setInstalling(true)
-                try { await openDownload(pendingUpdate.asset.url, pendingUpdate.asset.name) } finally { setInstalling(false); setPendingUpdate(null) }
-              }}>{installing ? 'Starting…' : `Update Now v${pendingUpdate.latestVersion}`}</button>
+                try {
+                  await openDownload(pendingUpdate.asset.url, pendingUpdate.asset.name)
+                  setUpdateNotice(`Update download started for v${pendingUpdate.latestVersion}.`)
+                  setPendingUpdate(null)
+                } catch (e) {
+                  setUpdateNotice(e.message || 'Could not start update download.')
+                } finally {
+                  setInstalling(false)
+                }
+              }}>{installing ? 'Starting...' : `Update Now v${pendingUpdate.latestVersion}`}</button>
             </div>
           </div>
         </div>
