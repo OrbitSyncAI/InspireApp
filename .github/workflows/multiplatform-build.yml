@@ -2,6 +2,7 @@
 #  InspireApp — Ultimate Multi-Platform Production Pipeline
 #  Targets: Windows EXE | macOS DMG | Linux AppImage |
 #           Android APK | iOS IPA Framework
+#  Trigger build: update configuration
 # ============================================================
 
 name: 🚀 Multi-Platform Build
