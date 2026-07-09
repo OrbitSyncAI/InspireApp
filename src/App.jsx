@@ -6,6 +6,27 @@ import { checkForUpdates, openDownload } from './updateService'
 
 const tabKeys = Object.keys(categories).filter(k => k !== 'LIKED')
 const PER_PAGE = 10
+const CUSTOM_QUOTES_KEY = 'inspire-custom-quotes'
+const ambientMoods = ['Calm', 'Focus', 'Rain', 'Deep Work', 'Morning', 'Night', 'Ocean', 'Study', 'Healing', 'Dream']
+const builtInTracks = Array.from({ length: 50 }, (_, i) => {
+  const mood = ambientMoods[i % ambientMoods.length]
+  const base = 164 + (i % 12) * 11
+  return {
+    id: `track-${i + 1}`,
+    name: `${mood} ${String(i + 1).padStart(2, '0')}`,
+    mood: mood.toLowerCase().replace(/\s+/g, '-'),
+    notes: [base, base * 1.25, base * 1.5],
+    wave: i % 3 === 0 ? 'sine' : i % 3 === 1 ? 'triangle' : 'sawtooth',
+  }
+})
+
+function loadCustomQuotes() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_QUOTES_KEY) || '[]') } catch { return [] }
+}
+
+function saveCustomQuotes(quotes) {
+  try { localStorage.setItem(CUSTOM_QUOTES_KEY, JSON.stringify(quotes)) } catch {}
+}
 
 function favReducer(state, action) {
   switch (action.type) {
@@ -30,14 +51,17 @@ function createAmbientMusic(mode = 'calm') {
   if (!AudioContext) return null
   const ctx = new AudioContext()
   const master = ctx.createGain()
-  master.gain.value = 0.038
+  master.gain.value = 0.06
   master.connect(ctx.destination)
+  const track = builtInTracks.find(t => t.id === mode)
   const presets = {
     calm: { notes: [261.63, 329.63, 392], types: ['sine', 'triangle', 'triangle'] },
     focus: { notes: [220, 330, 440], types: ['triangle', 'sine', 'triangle'] },
     rain: { notes: [174.61, 261.63, 349.23], types: ['sine', 'sine', 'triangle'] },
   }
-  const selected = presets[mode] || presets.calm
+  const selected = track
+    ? { notes: track.notes, types: [track.wave, 'sine', 'triangle'] }
+    : presets[mode] || presets.calm
   const lfo = ctx.createOscillator()
   const lfoGain = ctx.createGain()
   lfo.frequency.value = mode === 'focus' ? 0.18 : 0.08
@@ -57,6 +81,16 @@ function createAmbientMusic(mode = 'calm') {
     return osc
   })
   return {
+    ctx,
+    setVolume(value) {
+      master.gain.setTargetAtTime(Math.max(0, Math.min(1, value)) * 0.16, ctx.currentTime, 0.03)
+    },
+    pause() {
+      try { ctx.suspend() } catch {}
+    },
+    resume() {
+      try { ctx.resume() } catch {}
+    },
     stop() {
       master.gain.setTargetAtTime(0, ctx.currentTime, 0.08)
       setTimeout(() => {
@@ -68,6 +102,88 @@ function createAmbientMusic(mode = 'calm') {
       }, 250)
     },
   }
+}
+
+async function downloadQuoteVideo(quote, musicMode) {
+  if (!quote) return
+  const canvas = document.createElement('canvas')
+  canvas.width = 1080
+  canvas.height = 1920
+  const ctx = canvas.getContext('2d')
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  const dest = audioCtx.createMediaStreamDestination()
+  const track = builtInTracks.find(t => t.id === musicMode)
+  const notes = track?.notes || [220, 330, 440]
+  const gain = audioCtx.createGain()
+  gain.gain.value = 0.045
+  gain.connect(dest)
+  const oscs = notes.map((freq, i) => {
+    const osc = audioCtx.createOscillator()
+    osc.type = i === 0 ? 'sine' : 'triangle'
+    osc.frequency.value = freq
+    osc.connect(gain)
+    osc.start()
+    return osc
+  })
+  const stream = canvas.captureStream(30)
+  dest.stream.getAudioTracks().forEach(t => stream.addTrack(t))
+  const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' })
+  const chunks = []
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data) }
+  const draw = (time = 0) => {
+    const hue = (time / 80) % 360
+    const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height)
+    grad.addColorStop(0, `hsl(${hue}, 78%, 58%)`)
+    grad.addColorStop(1, `hsl(${(hue + 72) % 360}, 72%, 44%)`)
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = 'rgba(255,255,255,0.16)'
+    ctx.fillRect(86, 180, 908, 1560)
+    ctx.fillStyle = '#fff'
+    ctx.textAlign = 'center'
+    ctx.font = '800 58px system-ui, sans-serif'
+    ctx.fillText('Inspire', 540, 310)
+    ctx.font = '600 52px system-ui, sans-serif'
+    const words = quote.text.split(' ')
+    let line = ''
+    let y = 650
+    words.forEach(word => {
+      const test = line ? `${line} ${word}` : word
+      if (ctx.measureText(test).width > 810) {
+        ctx.fillText(line, 540, y)
+        line = word
+        y += 72
+      } else {
+        line = test
+      }
+    })
+    if (line) ctx.fillText(line, 540, y)
+    ctx.font = '500 42px system-ui, sans-serif'
+    ctx.fillText(`— ${quote.author}`, 540, Math.min(y + 120, 1540))
+    ctx.font = '500 30px system-ui, sans-serif'
+    ctx.fillText(`Music: ${track?.name || musicMode}`, 540, 1660)
+  }
+  let raf
+  const started = performance.now()
+  const loop = () => {
+    draw(performance.now() - started)
+    raf = requestAnimationFrame(loop)
+  }
+  loop()
+  recorder.start()
+  await new Promise(resolve => setTimeout(resolve, 8000))
+  recorder.stop()
+  await new Promise(resolve => { recorder.onstop = resolve })
+  cancelAnimationFrame(raf)
+  oscs.forEach(osc => { try { osc.stop() } catch {} })
+  try { await audioCtx.close() } catch {}
+  const blob = new Blob(chunks, { type: 'video/webm' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'inspire-quote-with-music.webm'
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 export default function App() {
@@ -88,15 +204,19 @@ export default function App() {
   const [musicOn, setMusicOn] = useState(false)
   const [musicMode, setMusicMode] = useState(() => localStorage.getItem('inspire-music-mode') || 'calm')
   const [customMusicName, setCustomMusicName] = useState('')
+  const [musicVolume, setMusicVolume] = useState(() => parseFloat(localStorage.getItem('inspire-music-volume') || '0.45'))
+  const [customQuotes, setCustomQuotes] = useState(loadCustomQuotes)
   const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(true)
   const musicRef = useRef(null)
+  const uploadedAudioRef = useRef(null)
   const customMusicUrlRef = useRef('')
   const categoryTapRef = useRef({ key: '', time: 0 })
+  const allAvailableQuotes = useMemo(() => [...allQuotes, ...customQuotes], [customQuotes])
 
   const allFiltered = useMemo(() => {
     let list = tab === 'LIKED'
-      ? allQuotes.filter(q => favorites.includes(q.text))
-      : allQuotes.filter(q => q.category === tab)
+      ? allAvailableQuotes.filter(q => favorites.includes(q.text))
+      : allAvailableQuotes.filter(q => q.category === tab)
     const q = search.trim().toLowerCase()
     if (q) {
       list = list.filter(item =>
@@ -105,7 +225,7 @@ export default function App() {
       )
     }
     return list
-  }, [tab, favorites, search])
+  }, [tab, favorites, search, allAvailableQuotes])
 
   const safeIndex = allFiltered.length > 0 ? index % allFiltered.length : 0
   const quote = allFiltered.length > 0 ? allFiltered[safeIndex] : null
@@ -115,11 +235,10 @@ export default function App() {
   const totalPages = Math.max(1, Math.ceil(allFiltered.length / PER_PAGE))
   const listStart = listPage * PER_PAGE
   const listQuotes = allFiltered.slice(listStart, listStart + PER_PAGE)
-  const todayQuote = allQuotes[dailyQuoteIndex()]
   const dailyQuotes = useMemo(() => {
     const start = dailyQuoteIndex()
-    return Array.from({ length: Math.min(5, allQuotes.length) }, (_, i) => allQuotes[(start + i * 17) % allQuotes.length])
-  }, [])
+    return Array.from({ length: Math.min(5, allAvailableQuotes.length) }, (_, i) => allAvailableQuotes[(start + i * 17) % allAvailableQuotes.length])
+  }, [allAvailableQuotes])
   const currentPlatform = useMemo(() => {
     const forced = new URLSearchParams(window.location.search).get('platform')
     return forced || detectPlatform()
@@ -131,6 +250,8 @@ export default function App() {
   useEffect(() => { localStorage.setItem('inspire-tab', tab) }, [tab])
   useEffect(() => { localStorage.setItem('inspire-view', viewMode) }, [viewMode])
   useEffect(() => { localStorage.setItem('inspire-music-mode', musicMode) }, [musicMode])
+  useEffect(() => { localStorage.setItem('inspire-music-volume', String(musicVolume)); if (musicRef.current?.setVolume) musicRef.current.setVolume(musicVolume) }, [musicVolume])
+  useEffect(() => { saveCustomQuotes(customQuotes) }, [customQuotes])
   useEffect(() => { document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light') }, [dark])
   useEffect(() => { if (page === 'archive') setPage('quotes') }, [page])
   useEffect(() => { setMenuOpen(false) }, [page, tab])
@@ -149,11 +270,11 @@ export default function App() {
 
   const setIndexWrap = useCallback((idx, cat) => {
     const c = cat || tab
-    const qs = c === 'LIKED' ? allQuotes.filter(q => favorites.includes(q.text)) : allQuotes.filter(q => q.category === c)
+    const qs = c === 'LIKED' ? allAvailableQuotes.filter(q => favorites.includes(q.text)) : allAvailableQuotes.filter(q => q.category === c)
     const wrapped = qs.length > 0 ? ((idx % qs.length) + qs.length) % qs.length : 0
     setIndex(wrapped)
     saveIndex(c, wrapped)
-  }, [tab, favorites])
+  }, [tab, favorites, allAvailableQuotes])
 
   const toggleFav = useCallback(() => {
     if (!quote) return
@@ -247,24 +368,56 @@ export default function App() {
 
   const toggleMusic = () => {
     if (musicOn) {
-      if (musicRef.current) musicRef.current.stop()
-      musicRef.current = null
+      if (uploadedAudioRef.current) uploadedAudioRef.current.pause()
+      else if (musicRef.current?.pause) musicRef.current.pause()
       setMusicOn(false)
+      return
+    }
+    if (uploadedAudioRef.current) {
+      uploadedAudioRef.current.play().then(() => setMusicOn(true)).catch(() => setMusicOn(false))
+      return
+    }
+    if (musicRef.current?.resume) {
+      musicRef.current.resume()
+      setMusicOn(true)
       return
     }
     const player = createAmbientMusic(musicMode)
     if (player) {
       musicRef.current = player
+      player.setVolume?.(musicVolume)
       setMusicOn(true)
     }
   }
 
   const changeMusicMode = (mode) => {
     setMusicMode(mode)
+    if (uploadedAudioRef.current) {
+      uploadedAudioRef.current.pause()
+      uploadedAudioRef.current = null
+    }
     if (!musicOn) return
     if (musicRef.current) musicRef.current.stop()
     const player = createAmbientMusic(mode)
-    if (player) musicRef.current = player
+    if (player) {
+      musicRef.current = player
+      player.setVolume?.(musicVolume)
+    }
+  }
+
+  const restartMusic = () => {
+    if (uploadedAudioRef.current) {
+      uploadedAudioRef.current.currentTime = 0
+      uploadedAudioRef.current.play().then(() => setMusicOn(true)).catch(() => {})
+      return
+    }
+    if (musicRef.current) musicRef.current.stop()
+    const player = createAmbientMusic(musicMode)
+    if (player) {
+      musicRef.current = player
+      player.setVolume?.(musicVolume)
+      setMusicOn(true)
+    }
   }
 
   const handleMusicUpload = (event) => {
@@ -275,9 +428,13 @@ export default function App() {
     const url = URL.createObjectURL(file)
     const audio = new Audio(url)
     audio.loop = true
-    audio.volume = 0.45
+    audio.volume = musicVolume
     customMusicUrlRef.current = url
+    uploadedAudioRef.current = audio
     musicRef.current = {
+      setVolume(value) { audio.volume = Math.max(0, Math.min(1, value)) },
+      pause() { audio.pause() },
+      resume() { return audio.play() },
       stop() {
         audio.pause()
         audio.currentTime = 0
@@ -329,6 +486,7 @@ export default function App() {
     { id: 'quotes', label: 'Home', emoji: '🏠' },
     { id: 'daily', label: 'Daily', emoji: '☀️' },
     { id: 'liked', label: 'Liked Quotes', emoji: '❤️' },
+    { id: 'custom', label: 'My Quotes', emoji: '📝' },
     { id: 'about', label: 'About Us', emoji: 'ℹ️' },
     { id: 'contact', label: 'Contact', emoji: '📞' },
     { id: 'privacy', label: 'Privacy', emoji: '🔒' },
@@ -492,10 +650,21 @@ export default function App() {
                       {mode[0].toUpperCase() + mode.slice(1)}
                     </button>
                   ))}
-                  <label className="music-upload">
+                  <select className="music-select" value={builtInTracks.some(t => t.id === musicMode) ? musicMode : ''} onChange={e => e.target.value && changeMusicMode(e.target.value)}>
+                    <option value="">50 built-in music</option>
+                    {builtInTracks.map(track => <option key={track.id} value={track.id}>{track.name}</option>)}
+                  </select>
+                  <button className="music-chip" onClick={toggleMusic}>{musicOn ? 'Pause' : 'Play'}</button>
+                  <button className="music-chip" onClick={restartMusic}>Restart</button>
+                  <label className="music-volume">
+                    Vol
+                    <input type="range" min="0" max="1" step="0.01" value={musicVolume} onChange={e => setMusicVolume(parseFloat(e.target.value))} />
+                  </label>
+                  <label className="music-upload music-upload-highlight">
                     Upload
                     <input type="file" accept="audio/*" onChange={handleMusicUpload} />
                   </label>
+                  <button className="music-chip music-video-btn" onClick={() => downloadQuoteVideo(quote, musicMode)}>Video + Song</button>
                   {customMusicName && <small>{customMusicName}</small>}
                 </div>
 
@@ -577,6 +746,8 @@ export default function App() {
           <DailyPage quotes={dailyQuotes} navTo={navTo} onFav={(text) => dispatchFav({ type: 'TOGGLE', text })} favorites={favorites} />
         ) : page === 'updates' ? (
           <UpdatesPage />
+        ) : page === 'custom' ? (
+          <CustomQuotesPage customQuotes={customQuotes} setCustomQuotes={setCustomQuotes} builtInQuotes={allQuotes} />
         ) : (
           <StaticPage page={page} navTo={navTo} />
         )}
@@ -682,6 +853,8 @@ function UpdatesPage() {
   const [status, setStatus] = useState('idle') // idle | loading | done | error
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
+  const [pendingUpdate, setPendingUpdate] = useState(null)
+  const [installing, setInstalling] = useState(false)
   const platform = detectPlatform()
 
   const runCheck = async () => {
@@ -764,7 +937,7 @@ function UpdatesPage() {
                 {result.asset ? (
                   <div className="download-box">
                     <p>Recommended for <strong>{platformLabel(result.platform)}</strong>:</p>
-                    <button className="cta-btn" onClick={() => openDownload(result.asset.url, result.asset.name)}>
+                    <button className="cta-btn" onClick={() => setPendingUpdate(result)}>
                       ⬇️ Download & Update v{result.latestVersion}
                     </button>
                     <p className="small-note">On Android, the app downloads the update inside the app and then shows the system install prompt. Windows, macOS, Linux, and iOS still use the operating-system installer rules for final installation.</p>
@@ -795,6 +968,111 @@ function UpdatesPage() {
           <li>After installing the new build, reopen the app and the installed version shown here changes.</li>
         </ol>
         <a className="phone-link" href={RELEASES_PAGE} target="_blank" rel="noreferrer">Browse all releases →</a>
+      </div>
+      {pendingUpdate?.asset && (
+        <div className="update-modal-backdrop" onClick={() => !installing && setPendingUpdate(null)}>
+          <div className="update-modal" onClick={e => e.stopPropagation()}>
+            <h2>Update to v{pendingUpdate.latestVersion}</h2>
+            <p>InspireApp will download the recommended update for <strong>{platformLabel(pendingUpdate.platform)}</strong>. Android and desktop builds start the download from inside the app, then the system installer asks for final permission.</p>
+            <div className="update-modal-actions">
+              <button className="cta-btn cta-secondary" disabled={installing} onClick={() => setPendingUpdate(null)}>Cancel</button>
+              <button className="cta-btn" disabled={installing} onClick={async () => {
+                setInstalling(true)
+                try { await openDownload(pendingUpdate.asset.url, pendingUpdate.asset.name) } finally { setInstalling(false); setPendingUpdate(null) }
+              }}>{installing ? 'Starting…' : `Update Now v${pendingUpdate.latestVersion}`}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CustomQuotesPage({ customQuotes, setCustomQuotes, builtInQuotes }) {
+  const [text, setText] = useState('')
+  const [author, setAuthor] = useState('Me')
+  const [category, setCategory] = useState('HINDI')
+  const addQuote = () => {
+    const clean = text.trim()
+    if (!clean) return
+    setCustomQuotes(prev => [{
+      text: clean,
+      author: author.trim() || 'Me',
+      category,
+      custom: true,
+      id: `custom-${Date.now()}`,
+    }, ...prev])
+    setText('')
+  }
+  const removeQuote = (id) => setCustomQuotes(prev => prev.filter(q => q.id !== id))
+  const downloadJson = (payload, name) => {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+  const exportMine = () => downloadJson({ type: 'inspire-custom-quotes', exportedAt: new Date().toISOString(), quotes: customQuotes }, 'inspire-my-quotes-backup.json')
+  const exportAll = () => downloadJson({ type: 'inspire-all-quotes', exportedAt: new Date().toISOString(), quotes: [...builtInQuotes, ...customQuotes] }, 'inspire-all-quotes-backup.json')
+  const importBackup = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      const payload = JSON.parse(await file.text())
+      const imported = Array.isArray(payload) ? payload : payload.quotes
+      if (!Array.isArray(imported)) return
+      const normalized = imported
+        .filter(q => q?.text)
+        .map((q, i) => ({
+          text: String(q.text),
+          author: String(q.author || 'Me'),
+          category: categories[q.category] ? q.category : 'HINDI',
+          custom: true,
+          id: q.id || `import-${Date.now()}-${i}`,
+        }))
+      setCustomQuotes(prev => [...normalized, ...prev])
+    } catch {}
+    event.target.value = ''
+  }
+
+  return (
+    <div className="static-page">
+      <div className="static-card static-wide custom-quotes-page">
+        <h1>📝 My Quotes</h1>
+        <p>Your manual quotes stay on this device in local app data. You can export a backup, import it again, or export your quotes together with InspireApp quotes.</p>
+        <div className="custom-form">
+          <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Write your quote..." rows={4} />
+          <div className="custom-form-row">
+            <input value={author} onChange={e => setAuthor(e.target.value)} placeholder="Author" />
+            <select value={category} onChange={e => setCategory(e.target.value)}>
+              {Object.keys(categories).filter(k => k !== 'LIKED').map(key => (
+                <option key={key} value={key}>{categories[key].emoji} {categories[key].label}</option>
+              ))}
+            </select>
+          </div>
+          <button className="cta-btn" onClick={addQuote}>Add Quote</button>
+        </div>
+        <div className="backup-actions">
+          <button className="cta-btn cta-secondary" onClick={exportMine}>Backup My Quotes</button>
+          <button className="cta-btn cta-secondary" onClick={exportAll}>Backup All Quotes</button>
+          <label className="cta-btn cta-secondary import-backup">
+            Import Backup
+            <input type="file" accept="application/json,.json" onChange={importBackup} />
+          </label>
+        </div>
+        <div className="custom-list">
+          {customQuotes.length === 0 ? (
+            <p>No manual quotes yet.</p>
+          ) : customQuotes.map(q => (
+            <article key={q.id} className="custom-quote-card">
+              <p>{q.text}</p>
+              <small>— {q.author} · {categories[q.category]?.label}</small>
+              <button onClick={() => removeQuote(q.id)}>Remove</button>
+            </article>
+          ))}
+        </div>
       </div>
     </div>
   )

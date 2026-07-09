@@ -4,6 +4,7 @@
   TECH:               { label: 'Tech',                emoji: '💻' },
   CRITICAL_THINKING:  { label: 'Critical Thinking',   emoji: '🧠' },
   HINDI:              { label: 'हिंदी विचार',         emoji: '🇮🇳' },
+  HINDI_NEW:          { label: 'नए हिंदी विचार',       emoji: '✨' },
   URDU:               { label: 'اردو اقوال',          emoji: '🌙' },
   LOVE:               { label: 'Love',                emoji: '💕' },
   WISDOM:             { label: 'Wisdom',              emoji: '🦉' },
@@ -23,6 +24,7 @@ export const gradients = {
   TECH:               ['#4FACFE', '#00F2FE'],
   CRITICAL_THINKING:  ['#43E97B', '#38F9D7'],
   HINDI:              ['#FF9933', '#138808'],
+  HINDI_NEW:          ['#F97316', '#2563EB'],
   URDU:               ['#2B6B4F', '#1A4731'],
   LOVE:               ['#FF6B6B', '#EE5A24'],
   WISDOM:             ['#8E44AD', '#2C3E50'],
@@ -324,6 +326,16 @@ export const allQuotes = [
   { text: 'The mind becomes lighter when it stops arguing with reality and starts building from it.', author: 'Sohel Khan', category: 'MINDSET' },
   { text: 'Confidence is useful, but commitment is stronger. Commitment keeps working even when confidence is quiet.', author: 'Sohel Khan', category: 'MINDSET' },
   { text: 'Protect your attention. Whatever owns your focus slowly designs your life.', author: 'Sohel Khan', category: 'MINDSET' },
+  { text: 'नया दिन नई सोच मांगता है। पुराने डर को साथ लेकर चलोगे तो नई मंजिल भी पुरानी लगेगी।', author: 'Sohel Khan', category: 'HINDI_NEW' },
+  { text: 'दिल में भरोसा और हाथों में मेहनत हो तो रास्ता देर से सही, खुलता जरूर है।', author: 'Sohel Khan', category: 'HINDI_NEW' },
+  { text: 'जिस काम से तुम्हारा भविष्य बेहतर होता है, उसके लिए आज थोड़ा असुविधा सहना भी समझदारी है।', author: 'Sohel Khan', category: 'HINDI_NEW' },
+  { text: 'लोगों की आवाज़ कम सुनो, अपने कर्म की आवाज़ ज्यादा मजबूत बनाओ।', author: 'Sohel Khan', category: 'HINDI_NEW' },
+  { text: 'समय को पकड़ना मुश्किल है, लेकिन समय का सही उपयोग करना तुम्हारे हाथ में है।', author: 'Sohel Khan', category: 'HINDI_NEW' },
+  { text: 'जब मन हार मानने लगे, तब अपनी वजह याद करो। वजह मजबूत हो तो रास्ता फिर दिखने लगता है।', author: 'Sohel Khan', category: 'HINDI_NEW' },
+  { text: 'छोटे कदमों को कम मत समझो। हर लंबी यात्रा ऐसे ही चुपचाप आगे बढ़ती है।', author: 'Sohel Khan', category: 'HINDI_NEW' },
+  { text: 'अगर इरादा साफ है तो देर भी तैयारी बन जाती है। जल्दी से ज्यादा जरूरी स्थिरता है।', author: 'Sohel Khan', category: 'HINDI_NEW' },
+  { text: 'अपने अंदर इतना उजाला रखो कि बुरे दिन भी तुम्हारा रास्ता पूरी तरह अंधेरा न कर सकें।', author: 'Sohel Khan', category: 'HINDI_NEW' },
+  { text: 'हर रोज़ खुद को बेहतर बनाने वाला इंसान एक दिन अपनी ही पुरानी सीमा से आगे निकल जाता है।', author: 'Sohel Khan', category: 'HINDI_NEW' },
 ]
 
 const boostThemes = {
@@ -332,6 +344,7 @@ const boostThemes = {
   TECH: 'useful technology',
   CRITICAL_THINKING: 'clear judgment',
   HINDI: 'steady self-belief',
+  HINDI_NEW: 'fresh Hindi inspiration',
   URDU: 'patient effort',
   LOVE: 'respectful care',
   WISDOM: 'quiet clarity',
@@ -365,6 +378,19 @@ const boostLines = [
   'The future gets clearer when today gets less cluttered.',
   'Let your effort be steady enough that doubt gets tired of interrupting.',
   'Growth is not a mood. It is a practice you return to again and again.',
+]
+
+const extraBoostLines = [
+  'Build quietly, improve honestly, and let the result carry the message.',
+  'A steady mind can turn a messy day into useful practice.',
+  'The next good choice is always close enough to begin again.',
+  'Do less of what drains you and more of what makes your work cleaner.',
+  'Respect the small task; it is often training for the bigger one.',
+  'Your best pace is the pace you can repeat with dignity.',
+  'Clarity grows when you remove one unnecessary thing at a time.',
+  'Stay useful, stay kind, and keep your attention where growth can happen.',
+  'A better life is usually built by better defaults, not louder promises.',
+  'Return to the work before doubt turns into a habit.',
 ]
 
 const extraHindiQuotes = [
@@ -436,6 +462,17 @@ Object.keys(boostThemes).forEach(category => {
       author: 'Sohel Khan',
       category,
       boostId: `${category}-${index + 1}`,
+    })
+  })
+})
+
+Object.keys(boostThemes).forEach(category => {
+  extraBoostLines.forEach((line, index) => {
+    allQuotes.push({
+      text: `${line} This adds fresh ${boostThemes[category]} for daily use.`,
+      author: 'Sohel Khan',
+      category,
+      boostId: `${category}-extra-${index + 1}`,
     })
   })
 })
