@@ -328,3 +328,28 @@ jobs:
           path: release-bundle/
           retention-days: 30
           if-no-files-found: warn
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: InspireApp v1.0.0
+          body: |
+            InspireApp Multi-Platform Production Release.
+            
+            ### Included Builds:
+            - **Windows**: `InspireApp Setup 1.0.0.exe` (or similar NSIS Installer)
+            - **macOS**: `InspireApp-1.0.0.dmg`
+            - **Linux**: `InspireApp-1.0.0.AppImage`
+            - **Android**: Capacitator Android App APK
+            - **iOS**: Unsigned iOS App IPA Framework
+          draft: false
+          prerelease: false
+          files: |
+            all-builds/windows-exe/**/*
+            all-builds/macos-dmg/**/*
+            all-builds/linux-appimage/**/*
+            all-builds/android-apk/**/*
+            all-builds/ios-ipa/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
