@@ -19,7 +19,7 @@ concurrency:
 
 env:
   NODE_VERSION: "22"
-  JAVA_VERSION: "21"         # Fixed: Updated to 21 to match Gradle requirements
+  JAVA_VERSION: "21"
   APP_NAME: "InspireApp"
   ELECTRON_VERSION: "31"
 
@@ -105,11 +105,11 @@ jobs:
             ~\AppData\Local\electron\Cache
           key: electron-${{ env.ELECTRON_VERSION }}-${{ matrix.runner }}
 
-      - name: 🔧 Scaffold Electron wrapper
+      # Permanent Fix: Scaffold packages DIRECTLY inside the dist folder to avoid ASAR path corruption
+      - name: 🔧 Scaffold Electron Wrapper in Dist
         shell: bash
         run: |
-          mkdir -p electron
-          cat > electron/main.js << 'EOJS'
+          cat > dist/main.js << 'EOJS'
           const { app, BrowserWindow } = require('electron');
           const path = require('path');
           let win;
@@ -118,18 +118,17 @@ jobs:
               width: 1280,
               height: 800,
               webPreferences: { contextIsolation: true },
-              icon: path.join(__dirname, 'icon.png'),
               title: 'InspireApp',
               autoHideMenuBar: true,
             });
-            win.loadFile(path.join(__dirname, '../dist/index.html'));
+            win.loadFile(path.join(__dirname, 'index.html'));
           }
           app.whenReady().then(createWindow);
           app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
           app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
           EOJS
 
-          cat > electron/package.json << 'EOJSON'
+          cat > dist/package.json << 'EOJSON'
           {
             "name": "inspire-app",
             "version": "1.0.0",
@@ -138,17 +137,16 @@ jobs:
           }
           EOJSON
 
-      # Fixed: Added explicit shell: bash for cross-platform compatibility on Windows runner
       - name: 📦 Install Electron + Builder
         shell: bash
         run: npm install --save-dev electron@${{ env.ELECTRON_VERSION }} electron-builder@latest --prefer-offline
 
-      # Fixed: Removed '--dir release' syntax and strictly use inline configuration structure
+      # Permanent Fix: Configuration explicitly rewritten to build out of the consolidated 'dist' directory
       - name: 🏗️ Build desktop app — ${{ matrix.os-name }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --${{ matrix.platform }} --config.appId="ai.orbitsync.inspireapp" --config.productName="InspireApp" --config.directories.buildResources="electron" --config.directories.output="release" --config.files="dist/**/*" --config.extraMetadata.main="electron/main.js" --config.win.target="nsis" --config.mac.target="dmg" --config.linux.target="AppImage" --publish never
+        run: npx electron-builder --${{ matrix.platform }} --config.appId="ai.orbitsync.inspireapp" --config.productName="InspireApp" --config.directories.output="release" --config.files="dist/**/*" --config.extraMetadata.main="dist/main.js" --config.win.target="nsis" --config.mac.target="dmg" --config.linux.target="AppImage" --publish never
 
       - name: 📤 Upload ${{ matrix.os-name }} binary
         uses: actions/upload-artifact@v4
