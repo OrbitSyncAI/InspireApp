@@ -147,7 +147,10 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --${{ matrix.platform }} --projectDir="dist" --config.appId="ai.orbitsync.inspireapp" --config.productName="InspireApp" --config.directories.output="../release" --config.win.target="nsis" --config.mac.target="dmg" --config.linux.target="AppImage" --publish never
+        run: |
+          ELECTRON_VER=$(node -p "require('electron/package.json').version")
+          echo "Installed Electron Version: $ELECTRON_VER"
+          npx electron-builder --${{ matrix.platform }} --projectDir="dist" --config.electronVersion="$ELECTRON_VER" --config.appId="ai.orbitsync.inspireapp" --config.productName="InspireApp" --config.directories.output="../release" --config.win.target="nsis" --config.mac.target="dmg" --config.linux.target="AppImage" --publish never
 
       - name: 📤 Upload ${{ matrix.os-name }} binary
         uses: actions/upload-artifact@v4
