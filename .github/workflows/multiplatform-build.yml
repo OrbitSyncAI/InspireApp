@@ -134,6 +134,12 @@ jobs:
             "name": "inspire-app",
             "version": "1.0.0",
             "main": "main.js",
+            "author": "OrbitSyncAI",
+            "description": "InspireApp Desktop Application",
+            "repository": {
+              "type": "git",
+              "url": "https://github.com/OrbitSyncAI/InspireApp.git"
+            },
             "private": true
           }
           EOJSON
@@ -150,7 +156,7 @@ jobs:
         run: |
           ELECTRON_VER=$(node -p "require('electron/package.json').version")
           echo "Installed Electron Version: $ELECTRON_VER"
-          npx electron-builder --${{ matrix.platform }} --projectDir="dist" --config.electronVersion="$ELECTRON_VER" --config.appId="ai.orbitsync.inspireapp" --config.productName="InspireApp" --config.directories.output="../release" --config.win.target="nsis" --config.mac.target="dmg" --config.linux.target="AppImage" --publish never
+          npx electron-builder --${{ matrix.platform }} --projectDir="dist" --config.electronVersion="$ELECTRON_VER" --config.appId="ai.orbitsync.inspireapp" --config.productName="InspireApp" --config.directories.output="../release" --config.win.target="nsis" --config.mac.target="dmg" --config.linux.target="AppImage" --config.publish=null --publish never
 
       - name: 📤 Upload ${{ matrix.os-name }} binary
         uses: actions/upload-artifact@v4
