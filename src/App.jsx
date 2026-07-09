@@ -2,7 +2,7 @@
 import { categories, gradients, allQuotes, currentYear } from './data'
 import { staticPages } from './pagesContent'
 import { APP_NAME, APP_VERSION, APP_BUILD, RELEASES_PAGE, detectPlatform, platformLabel } from './version'
-import { checkForUpdates, formatBytes, openDownload } from './updateService'
+import { checkForUpdates, openDownload } from './updateService'
 
 const tabKeys = Object.keys(categories).filter(k => k !== 'LIKED')
 const PER_PAGE = 10
@@ -18,7 +18,6 @@ function favReducer(state, action) {
 
 function getSavedIndex(cat) { try { return parseInt(localStorage.getItem('inspire-idx-'+cat) || '0', 10) } catch { return 0 } }
 function saveIndex(cat, idx) { try { localStorage.setItem('inspire-idx-'+cat, String(idx)) } catch {} }
-function getFontScale() { try { return parseFloat(localStorage.getItem('inspire-font') || '1') } catch { return 1 } }
 
 function dailyQuoteIndex() {
   const d = new Date()
@@ -83,12 +82,9 @@ export default function App() {
   const [dark, setDark] = useState(() => {
     try { return JSON.parse(localStorage.getItem('inspire-dark') || 'false') } catch { return false }
   })
-  const [undoStack, setUndoStack] = useState([])
-  const [redoStack, setRedoStack] = useState([])
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('inspire-view') || 'card')
   const [listPage, setListPage] = useState(0)
   const [search, setSearch] = useState('')
-  const [fontScale, setFontScale] = useState(getFontScale)
   const [musicOn, setMusicOn] = useState(false)
   const [musicMode, setMusicMode] = useState(() => localStorage.getItem('inspire-music-mode') || 'calm')
   const [customMusicName, setCustomMusicName] = useState('')
@@ -134,10 +130,8 @@ export default function App() {
   useEffect(() => { localStorage.setItem('inspire-page', page) }, [page])
   useEffect(() => { localStorage.setItem('inspire-tab', tab) }, [tab])
   useEffect(() => { localStorage.setItem('inspire-view', viewMode) }, [viewMode])
-  useEffect(() => { localStorage.setItem('inspire-font', String(fontScale)) }, [fontScale])
   useEffect(() => { localStorage.setItem('inspire-music-mode', musicMode) }, [musicMode])
   useEffect(() => { document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light') }, [dark])
-  useEffect(() => { document.documentElement.style.setProperty('--quote-scale', String(fontScale)) }, [fontScale])
   useEffect(() => { if (page === 'archive') setPage('quotes') }, [page])
   useEffect(() => { setMenuOpen(false) }, [page, tab])
   useEffect(() => { if (copied) { const t = setTimeout(() => setCopied(false), 2200); return () => clearTimeout(t) } }, [copied])
@@ -163,42 +157,16 @@ export default function App() {
 
   const toggleFav = useCallback(() => {
     if (!quote) return
-    setUndoStack(prev => [...prev, { type: 'TOGGLE', text: quote.text }].slice(-30))
-    setRedoStack([])
     dispatchFav({ type: 'TOGGLE', text: quote.text })
   }, [quote])
 
   const removeFavInline = useCallback((text) => {
-    setUndoStack(prev => [...prev, { type: 'REMOVE', text }].slice(-30))
-    setRedoStack([])
     dispatchFav({ type: 'REMOVE', text })
   }, [])
 
-  const handleUndo = useCallback(() => {
-    if (undoStack.length === 0) return
-    const last = undoStack[undoStack.length - 1]
-    setRedoStack(prev => [...prev, last])
-    setUndoStack(prev => prev.slice(0, -1))
-    if (last.type === 'TOGGLE') dispatchFav({ type: 'TOGGLE', text: last.text })
-    else if (last.type === 'REMOVE') dispatchFav({ type: 'RESTORE', payload: [...favorites, last.text] })
-    else if (last.type === 'CATEGORY') setTab(last.from)
-  }, [undoStack, favorites, setTab])
-
-  const handleRedo = useCallback(() => {
-    if (redoStack.length === 0) return
-    const next = redoStack[redoStack.length - 1]
-    setUndoStack(prev => [...prev, next])
-    setRedoStack(prev => prev.slice(0, -1))
-    if (next.type === 'TOGGLE') dispatchFav({ type: 'TOGGLE', text: next.text })
-    else if (next.type === 'REMOVE') dispatchFav({ type: 'REMOVE', text: next.text })
-    else if (next.type === 'CATEGORY') setTab(next.to)
-  }, [redoStack, setTab])
-
   const switchToCategory = useCallback((t) => {
-    setUndoStack(prev => [...prev, { type: 'CATEGORY', from: tab, to: t }].slice(-30))
-    setRedoStack([])
     setTab(t)
-  }, [tab, setTab])
+  }, [setTab])
 
   const selectMobileCategory = useCallback((t) => {
     if (t === 'LIKED') setTab('LIKED')
@@ -366,16 +334,6 @@ export default function App() {
             </button>
           ))}
         </div>
-        <div className="offcanvas-actions">
-          <button className="oc-undo-btn" onClick={handleUndo} disabled={undoStack.length === 0}>↩ Undo</button>
-          <button className="oc-redo-btn" onClick={handleRedo} disabled={redoStack.length === 0}>↪ Redo</button>
-        </div>
-        <div className="oc-font-row">
-          <span>Text size</span>
-          <button onClick={() => setFontScale(s => Math.max(0.85, +(s - 0.1).toFixed(2)))} aria-label="Smaller">A−</button>
-          <button onClick={() => setFontScale(1)}>A</button>
-          <button onClick={() => setFontScale(s => Math.min(1.4, +(s + 0.1).toFixed(2)))} aria-label="Larger">A+</button>
-        </div>
         <div className="oc-version-bottom">
           <span>{APP_NAME}</span>
           <strong>v{APP_VERSION}</strong>
@@ -404,10 +362,6 @@ export default function App() {
                   {item.badge && <span className="nav-badge-dot" />}
                 </button>
               ))}
-              <span className="undo-redo-inline">
-                <button onClick={handleUndo} disabled={undoStack.length === 0} title="Undo">↩</button>
-                <button onClick={handleRedo} disabled={redoStack.length === 0} title="Redo">↪</button>
-              </span>
             </nav>
             <button className="theme-toggle" onClick={() => setDark(prev => !prev)} title={dark ? 'Light' : 'Dark'}>
               {dark ? '☀️' : '🌙'}
@@ -789,7 +743,7 @@ function UpdatesPage() {
                   <div className="download-box">
                     <p>Recommended for <strong>{platformLabel(result.platform)}</strong>:</p>
                     <button className="cta-btn" onClick={() => openDownload(result.asset.url)}>
-                      ⬇️ Download & Update {result.asset.name} {result.asset.size ? `(${formatBytes(result.asset.size)})` : ''}
+                      ⬇️ Download & Update
                     </button>
                     <p className="small-note">For Windows, macOS, Linux, and Android, the app opens the matching installer/package from here. iOS updates still require opening the IPA through your normal iOS install/signing method. After install, reopen the app and the version number will change.</p>
                   </div>

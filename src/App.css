@@ -3223,3 +3223,38 @@ body {
   transition: none;
   touch-action: manipulation;
 }
+
+.app-shell * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+.cta-btn,
+.nav-btn,
+.vt-btn,
+.tab,
+.music-chip,
+.music-upload,
+.offcanvas-links button,
+.desktop-nav button {
+  touch-action: manipulation;
+}
+
+.platform-windows .main-content,
+.platform-macos .main-content,
+.platform-linux .main-content,
+.platform-web .main-content {
+  scroll-behavior: auto;
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .app-shell *::before,
+  .app-shell *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
