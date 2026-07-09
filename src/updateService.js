@@ -101,8 +101,22 @@ export function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function openDownload(url) {
+export async function openDownload(url, fileName = '') {
   if (!url) return
-  // Prefer new tab so Electron/WebView / browser all work
-  window.open(url, '_blank', 'noopener,noreferrer')
+  const nativeUpdater = window.Capacitor?.Plugins?.InspireUpdater
+  if (nativeUpdater?.downloadAndInstall) {
+    await nativeUpdater.downloadAndInstall({
+      url,
+      fileName: fileName || 'InspireApp-update.apk',
+    })
+    return
+  }
+
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName || ''
+  link.rel = 'noopener noreferrer'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
 }

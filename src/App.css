@@ -3047,6 +3047,32 @@ body {
   background: rgba(255,255,255,0.06);
 }
 
+[data-theme='dark'] .version-box > div,
+[data-theme='dark'] .download-box,
+[data-theme='dark'] .update-alert {
+  background: rgba(255,255,255,0.055);
+  border-color: rgba(255,255,255,0.12);
+  color: var(--static-text);
+}
+
+[data-theme='dark'] .vb-label,
+[data-theme='dark'] .small-note,
+[data-theme='dark'] .muted-date {
+  color: rgba(245,247,250,0.72);
+}
+
+[data-theme='dark'] .vb-value,
+[data-theme='dark'] .download-box strong,
+[data-theme='dark'] .update-alert strong,
+[data-theme='dark'] .updates-card h1,
+[data-theme='dark'] .updates-card h2 {
+  color: #F8FAFC;
+}
+
+[data-theme='dark'] .vb-new {
+  color: #7EE787;
+}
+
 [data-theme='dark'] .platform-windows.app-shell,
 [data-theme='dark'] .platform-windows .main-content,
 [data-theme='dark'] .platform-windows .desktop-hero {

@@ -307,6 +307,28 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
+      - name: Cache Android update signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/inspire-update.keystore
+          key: android-update-keystore-v1
+
+      - name: Ensure Android update signing key
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/inspire-update.keystore ]; then
+            keytool -genkeypair \
+              -storetype JKS \
+              -keystore ~/.android/inspire-update.keystore \
+              -storepass inspireUpdatePass \
+              -keypass inspireUpdatePass \
+              -alias inspireupdate \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=InspireApp, OU=OrbitSyncAI, O=OrbitSyncAI, L=Raebareli, S=UP, C=IN"
+          fi
+
       - name: Install dependencies + Capacitor
         run: |
           npm ci --prefer-offline
@@ -327,18 +349,177 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: Build Android debug APK
+      - name: Add Android in-app updater bridge
+        run: |
+          mkdir -p android/app/src/main/java/ai/orbitsync/inspireapp
+          mkdir -p android/app/src/main/res/xml
+
+          cat > android/app/src/main/java/ai/orbitsync/inspireapp/MainActivity.java << 'EOF'
+          package ai.orbitsync.inspireapp;
+
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+            @Override
+            public void onCreate(Bundle savedInstanceState) {
+              registerPlugin(InspireUpdaterPlugin.class);
+              super.onCreate(savedInstanceState);
+            }
+          }
+          EOF
+
+          cat > android/app/src/main/java/ai/orbitsync/inspireapp/InspireUpdaterPlugin.java << 'EOF'
+          package ai.orbitsync.inspireapp;
+
+          import android.app.Activity;
+          import android.app.DownloadManager;
+          import android.content.BroadcastReceiver;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.IntentFilter;
+          import android.database.Cursor;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Environment;
+          import androidx.core.content.FileProvider;
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+          import java.io.File;
+
+          @CapacitorPlugin(name = "InspireUpdater")
+          public class InspireUpdaterPlugin extends Plugin {
+            @PluginMethod
+            public void downloadAndInstall(PluginCall call) {
+              String url = call.getString("url");
+              String fileName = call.getString("fileName", "InspireApp-update.apk");
+              if (url == null || url.trim().isEmpty()) {
+                call.reject("Missing update URL");
+                return;
+              }
+
+              Activity activity = getActivity();
+              DownloadManager manager = (DownloadManager) activity.getSystemService(Context.DOWNLOAD_SERVICE);
+              DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+              request.setTitle("InspireApp update");
+              request.setDescription("Downloading update package");
+              request.setMimeType("application/vnd.android.package-archive");
+              request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+              request.setDestinationInExternalFilesDir(activity, Environment.DIRECTORY_DOWNLOADS, fileName);
+
+              long downloadId = manager.enqueue(request);
+              BroadcastReceiver receiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                  long completedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                  if (completedId != downloadId) return;
+
+                  try {
+                    context.unregisterReceiver(this);
+                  } catch (Exception ignored) {}
+
+                  DownloadManager.Query query = new DownloadManager.Query().setFilterById(downloadId);
+                  try (Cursor cursor = manager.query(query)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                      int statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
+                      int status = statusIndex >= 0 ? cursor.getInt(statusIndex) : DownloadManager.STATUS_FAILED;
+                      if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                        File apk = new File(activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName);
+                        openInstaller(activity, apk);
+                        JSObject ret = new JSObject();
+                        ret.put("started", true);
+                        call.resolve(ret);
+                        return;
+                      }
+                    }
+                  } catch (Exception e) {
+                    call.reject("Could not open installer: " + e.getMessage());
+                    return;
+                  }
+                  call.reject("Download failed");
+                }
+              };
+
+              IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+              if (Build.VERSION.SDK_INT >= 33) {
+                activity.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+              } else {
+                activity.registerReceiver(receiver, filter);
+              }
+            }
+
+            private void openInstaller(Activity activity, File apk) {
+              Uri uri = FileProvider.getUriForFile(activity, BuildConfig.APPLICATION_ID + ".fileprovider", apk);
+              Intent install = new Intent(Intent.ACTION_VIEW);
+              install.setDataAndType(uri, "application/vnd.android.package-archive");
+              install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+              install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+              activity.startActivity(install);
+            }
+          }
+          EOF
+
+          cat > android/app/src/main/res/xml/file_paths.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths xmlns:android="http://schemas.android.com/apk/res/android">
+            <external-files-path name="updates" path="Download/" />
+          </paths>
+          EOF
+
+          node << 'EOF'
+          const fs = require('fs');
+          const manifestPath = 'android/app/src/main/AndroidManifest.xml';
+          let xml = fs.readFileSync(manifestPath, 'utf8');
+          if (!xml.includes('android.permission.REQUEST_INSTALL_PACKAGES')) {
+            xml = xml.replace('<manifest', '<manifest')
+              .replace(/<application/, '    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application');
+          }
+          if (!xml.includes('androidx.core.content.FileProvider')) {
+            xml = xml.replace(
+              '</application>',
+              '        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" /></provider>\n    </application>'
+            );
+          }
+          fs.writeFileSync(manifestPath, xml);
+          EOF
+
+      - name: Configure Android release signing
+        run: |
+          cat >> android/app/build.gradle << 'EOF'
+
+          android {
+              signingConfigs {
+                  inspireRelease {
+                      storeFile file(System.getProperty("user.home") + "/.android/inspire-update.keystore")
+                      storePassword "inspireUpdatePass"
+                      keyAlias "inspireupdate"
+                      keyPassword "inspireUpdatePass"
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.inspireRelease
+                      minifyEnabled false
+                  }
+              }
+          }
+          EOF
+
+      - name: Build Android release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --parallel --build-cache -Dorg.gradle.jvmargs="-Xmx4g -XX:+UseParallelGC"
+          ./gradlew assembleRelease --no-daemon --parallel --build-cache -Dorg.gradle.jvmargs="-Xmx4g -XX:+UseParallelGC"
 
       - name: Rename APK for release clarity
         run: |
           mkdir -p out-android
-          APK=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
           if [ -n "$APK" ]; then
-            cp "$APK" "out-android/InspireApp-${{ env.RELEASE_VERSION }}-android-debug.apk"
+            cp "$APK" "out-android/InspireApp-${{ env.RELEASE_VERSION }}-android.apk"
             ls -la out-android/
           else
             echo "No APK found"
@@ -498,7 +679,7 @@ jobs:
             - Windows installer: `.exe`
             - macOS app bundle: `.zip`
             - Linux desktop app: `.AppImage`
-            - Android app: `.apk`
+            - Android app: release-signed `.apk`
             - iOS package: unsigned `.ipa`
             - Web bundle: browser-ready `dist` files
 

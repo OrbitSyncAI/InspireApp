@@ -742,10 +742,10 @@ function UpdatesPage() {
                 {result.asset ? (
                   <div className="download-box">
                     <p>Recommended for <strong>{platformLabel(result.platform)}</strong>:</p>
-                    <button className="cta-btn" onClick={() => openDownload(result.asset.url)}>
+                    <button className="cta-btn" onClick={() => openDownload(result.asset.url, result.asset.name)}>
                       ⬇️ Download & Update
                     </button>
-                    <p className="small-note">For Windows, macOS, Linux, and Android, the app opens the matching installer/package from here. iOS updates still require opening the IPA through your normal iOS install/signing method. After install, reopen the app and the version number will change.</p>
+                    <p className="small-note">On Android, the app downloads the update inside the app and then shows the system install prompt. Windows, macOS, Linux, and iOS still use the operating-system installer rules for final installation.</p>
                   </div>
                 ) : (
                   <div className="download-box">
@@ -768,8 +768,8 @@ function UpdatesPage() {
           <li>You push code and run the multi-platform build pipeline.</li>
           <li>A GitHub Release is created with Windows / macOS / Linux / Android / iOS files.</li>
           <li>Users open <strong>Updates</strong> → <strong>Check for Updates</strong>.</li>
-          <li>The app shows the new <strong>version number</strong>, clean release notes, and the recommended update file for that device.</li>
-          <li>Operating systems do not allow every app to silently replace itself. The update starts from inside this app, then the system installer finishes it.</li>
+          <li>The app shows the new <strong>version number</strong>, clean release notes, and one recommended update action for that device.</li>
+          <li>Android downloads inside the app and then opens the system install prompt. Other operating systems may still hand off the final install to their native installer.</li>
           <li>After installing the new build, reopen the app and the installed version shown here changes.</li>
         </ol>
         <a className="phone-link" href={RELEASES_PAGE} target="_blank" rel="noreferrer">Browse all releases →</a>
