@@ -1,11 +1,10 @@
 # ============================================================
-#  InspireApp — Ultimate Multi-Platform Production Pipeline
+#  InspireApp — Multi-Platform Production Pipeline
 #  Targets: Windows EXE | macOS DMG | Linux AppImage |
-#           Android APK | iOS IPA Framework
-#  Trigger build: update configuration
+#           Android APK | iOS IPA (unsigned, best-effort)
 # ============================================================
 
-name: 🚀 Multi-Platform Build
+name: Multi-Platform Build
 
 on:
   push:
@@ -18,36 +17,41 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+  actions: read
+
 env:
   NODE_VERSION: "22"
   JAVA_VERSION: "21"
   APP_NAME: "InspireApp"
-  ELECTRON_VERSION: "31"
+  # Pin exact Electron version (electron-builder rejects ranges)
+  ELECTRON_VERSION: "31.7.7"
 
 jobs:
   # ===========================================================================
-  # JOB 1 ─ Build the Vite web bundle
+  # JOB 1 — Vite web bundle
   # ===========================================================================
   build-web:
-    name: 🌐 Vite Web Bundle
+    name: Vite Web Bundle
     runs-on: ubuntu-latest
     steps:
-      - name: ⬇️ Checkout source
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: ⚡ Setup Node.js ${{ env.NODE_VERSION }}
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: npm
 
-      - name: 📦 Install dependencies
+      - name: Install dependencies
         run: npm ci --prefer-offline
 
-      - name: 🔨 Vite production build
+      - name: Vite production build
         run: npm run build
 
-      - name: 📤 Upload web dist
+      - name: Upload web dist
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
@@ -56,10 +60,10 @@ jobs:
           if-no-files-found: error
 
   # ===========================================================================
-  # JOB 2 ─ Desktop builds (Windows / macOS / Linux) via Electron Builder
+  # JOB 2 — Desktop (Windows / macOS / Linux) via Electron Builder
   # ===========================================================================
   build-desktop:
-    name: 🖥️ Desktop — ${{ matrix.os-name }}
+    name: Desktop — ${{ matrix.os-name }}
     needs: build-web
     strategy:
       fail-fast: false
@@ -82,22 +86,22 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
     steps:
-      - name: ⬇️ Checkout source
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: ⚡ Setup Node.js ${{ env.NODE_VERSION }}
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: npm
 
-      - name: 📥 Download web dist
+      - name: Download web dist
         uses: actions/download-artifact@v4
         with:
           name: web-dist
           path: dist/
 
-      - name: 🗄️ Cache Electron binaries
+      - name: Cache Electron binaries
         uses: actions/cache@v4
         with:
           path: |
@@ -106,97 +110,163 @@ jobs:
             ~\AppData\Local\electron\Cache
           key: electron-${{ env.ELECTRON_VERSION }}-${{ matrix.runner }}
 
-      # Scaffold exact production assets direct in dist
-      - name: 🔧 Scaffold Electron Wrapper in Dist
+      - name: Install project deps + Electron tooling
         shell: bash
         run: |
-          cat > dist/main.js << 'EOJS'
+          npm ci --prefer-offline
+          npm install --save-dev "electron@${{ env.ELECTRON_VERSION }}" electron-builder@25.1.8 --prefer-offline --no-fund --no-audit
+
+      - name: Scaffold Electron main process + builder config
+        shell: bash
+        run: |
+          cat > electron-main.cjs << 'EOJS'
           const { app, BrowserWindow } = require('electron');
           const path = require('path');
-          let win;
+
           function createWindow() {
-            win = new BrowserWindow({
+            const win = new BrowserWindow({
               width: 1280,
               height: 800,
-              webPreferences: { contextIsolation: true },
+              webPreferences: {
+                contextIsolation: true,
+                nodeIntegration: false,
+              },
               title: 'InspireApp',
               autoHideMenuBar: true,
+              show: false,
             });
-            win.loadFile(path.join(__dirname, 'index.html'));
+            win.once('ready-to-show', () => win.show());
+            win.loadFile(path.join(__dirname, 'dist', 'index.html'));
           }
+
           app.whenReady().then(createWindow);
-          app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-          app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+          app.on('window-all-closed', () => {
+            if (process.platform !== 'darwin') app.quit();
+          });
+          app.on('activate', () => {
+            if (BrowserWindow.getAllWindows().length === 0) createWindow();
+          });
           EOJS
 
-          cat > dist/package.json << 'EOJSON'
-          {
-            "name": "inspire-app",
-            "version": "1.0.0",
-            "main": "main.js",
-            "author": "OrbitSyncAI",
-            "description": "InspireApp Desktop Application",
-            "repository": {
-              "type": "git",
-              "url": "https://github.com/OrbitSyncAI/InspireApp.git"
-            },
-            "publish": null,
-            "private": true
-          }
-          EOJSON
+          cat > electron-builder.yml << 'EOYML'
+          appId: ai.orbitsync.inspireapp
+          productName: InspireApp
+          copyright: Copyright © OrbitSyncAI
+          directories:
+            output: release
+            buildResources: build
+          files:
+            - dist/**/*
+            - electron-main.cjs
+            - package.json
+          extraMetadata:
+            main: electron-main.cjs
+          asar: true
+          win:
+            target:
+              - target: nsis
+                arch: [x64]
+            artifactName: InspireApp-Setup-${version}.${ext}
+          nsis:
+            oneClick: false
+            allowToChangeInstallationDirectory: true
+            createDesktopShortcut: true
+          mac:
+            target:
+              - target: dmg
+                arch: [x64, arm64]
+            artifactName: InspireApp-${version}-mac.${ext}
+            identity: null
+            hardenedRuntime: false
+            gatekeeperAssess: false
+          dmg:
+            title: InspireApp ${version}
+          linux:
+            target:
+              - target: AppImage
+                arch: [x64]
+            category: Utility
+            artifactName: InspireApp-${version}-linux.${ext}
+          EOYML
 
-      - name: 📦 Install Electron + Builder
-        shell: bash
-        run: npm install --save-dev electron@${{ env.ELECTRON_VERSION }} electron-builder@latest --prefer-offline
+          # Ensure package.json has description/author for electron-builder
+          node << 'EONODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          pkg.main = 'electron-main.cjs';
+          pkg.description = pkg.description || 'InspireApp Desktop Application';
+          pkg.author = pkg.author || 'OrbitSyncAI';
+          // Remove ESM type for main process packaging clarity (app still ships built dist)
+          delete pkg.type;
+          // Never set publish:null as a string provider — omit publish entirely
+          delete pkg.publish;
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          EONODE
 
-      # Fixed: Added explicit projectDir mapping to 'dist' folder so asset references never break
-      - name: 🏗️ Build desktop app — ${{ matrix.os-name }}
+      - name: Build desktop app — ${{ matrix.os-name }}
         shell: bash
         env:
+          # Do not auto-discover code signing certs
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # Prevent electron-builder from trying to publish
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ELECTRON_VER=$(node -p "require('electron/package.json').version")
-          echo "Installed Electron Version: $ELECTRON_VER"
-          npx electron-builder --${{ matrix.platform }} --projectDir="dist" --config.electronVersion="$ELECTRON_VER" --config.appId="ai.orbitsync.inspireapp" --config.productName="InspireApp" --config.directories.output="../release" --config.win.target="nsis" --config.mac.target="dmg" --config.linux.target="AppImage" --publish never
+          npx electron-builder --${{ matrix.platform }} \
+            --config electron-builder.yml \
+            --config.electronVersion=${{ env.ELECTRON_VERSION }} \
+            --publish never
 
-      - name: 📤 Upload ${{ matrix.os-name }} binary
+      - name: List release outputs
+        shell: bash
+        run: |
+          echo "=== release/ ==="
+          ls -laR release/ || true
+
+      - name: Upload ${{ matrix.os-name }} binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: release/
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.zip
+            release/*.blockmap
+            release/*.yml
+            release/*.yaml
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 14
 
   # ===========================================================================
-  # JOB 3 ─ Android APK via Capacitor + Gradle
+  # JOB 3 — Android APK (Capacitor + Gradle)
   # ===========================================================================
   build-android:
-    name: 🤖 Android APK
+    name: Android APK
     needs: build-web
     runs-on: ubuntu-latest
     steps:
-      - name: ⬇️ Checkout source
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: ⚡ Setup Node.js ${{ env.NODE_VERSION }}
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: npm
 
-      - name: ☕ Setup Java ${{ env.JAVA_VERSION }}
+      - name: Setup Java ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
+          distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: 📱 Setup Android SDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: ✅ Accept Android SDK licenses
+      - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses || true
 
-      - name: 🗄️ Cache Gradle
+      - name: Cache Gradle
         uses: actions/cache@v4
         with:
           path: |
@@ -205,123 +275,173 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: 📥 Download web dist
+      - name: Download web dist
         uses: actions/download-artifact@v4
         with:
           name: web-dist
           path: dist/
 
-      - name: 📦 Install dependencies + Capacitor CLI
+      - name: Install dependencies + Capacitor
         run: |
           npm ci --prefer-offline
-          npm install --save-dev @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --prefer-offline
+          npm install --save-dev @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 --prefer-offline --no-fund --no-audit
 
-      - name: 🔧 Initialize Capacitor & add Android platform
+      - name: Initialize Capacitor & add Android
         run: |
-          npx cap init "InspireApp" "ai.orbitsync.inspireapp" --web-dir dist
+          if [ ! -f capacitor.config.json ] && [ ! -f capacitor.config.ts ]; then
+            npx cap init "InspireApp" "ai.orbitsync.inspireapp" --web-dir dist
+          fi
           npx cap add android
+          npx cap sync android
 
-      - name: 🔄 Sync Capacitor
-        run: npx cap sync android
-
-      - name: 🏗️ Build Android debug APK
+      - name: Build Android debug APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --parallel --build-cache -Dorg.gradle.jvmargs="-Xmx4g -XX:+UseParallelGC"
 
-      - name: 📤 Upload Android APK
+      - name: Rename APK for release clarity
+        run: |
+          mkdir -p out-android
+          APK=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          if [ -n "$APK" ]; then
+            cp "$APK" out-android/InspireApp-1.0.0-debug.apk
+            ls -la out-android/
+          else
+            echo "No APK found"
+            exit 1
+          fi
+
+      - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: android/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: warn
-          retention-days: 7
+          path: out-android/*.apk
+          if-no-files-found: error
+          retention-days: 14
 
   # ===========================================================================
-  # JOB 4 ─ iOS IPA Framework via Capacitor + Xcode
+  # JOB 4 — iOS IPA (unsigned, best-effort)
   # ===========================================================================
   build-ios:
-    name: 🍎 iOS IPA Framework
+    name: iOS IPA Framework
     needs: build-web
     runs-on: macos-latest
     steps:
-      - name: ⬇️ Checkout source
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: ⚡ Setup Node.js ${{ env.NODE_VERSION }}
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          cache: npm
 
-      - name: 📥 Download web dist
+      - name: Download web dist
         uses: actions/download-artifact@v4
         with:
           name: web-dist
           path: dist/
 
-      - name: 📦 Install dependencies + Capacitor iOS
+      - name: Install dependencies + Capacitor iOS
         run: |
           npm ci --prefer-offline
-          npm install --save-dev @capacitor/core@latest @capacitor/cli@latest @capacitor/ios@latest --prefer-offline
+          npm install --save-dev @capacitor/core@6 @capacitor/cli@6 @capacitor/ios@6 --prefer-offline --no-fund --no-audit
 
-      - name: 🔧 Initialize Capacitor & add iOS platform
+      - name: Initialize Capacitor & add iOS
         run: |
-          npx cap init "InspireApp" "ai.orbitsync.inspireapp" --web-dir dist
+          if [ ! -f capacitor.config.json ] && [ ! -f capacitor.config.ts ]; then
+            npx cap init "InspireApp" "ai.orbitsync.inspireapp" --web-dir dist
+          fi
           npx cap add ios
+          npx cap sync ios
 
-      - name: 🔄 Sync Capacitor
-        run: npx cap sync ios
-
-      - name: 🛠️ Select Xcode
+      - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
-      - name: 🏗️ Xcode Archive (unsigned)
+      - name: Xcode Archive (unsigned)
+        continue-on-error: true
         run: |
-          xcodebuild archive -workspace ios/App/App.xcworkspace -scheme App -configuration Release -archivePath ios/App/build/InspireApp.xcarchive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO SKIP_INSTALL=NO | xcpretty || true
+          set -o pipefail
+          xcodebuild archive \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -archivePath ios/App/build/InspireApp.xcarchive \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            || true
 
-      - name: 📦 Export app framework
+      - name: Package IPA
+        continue-on-error: true
         run: |
-          mkdir -p ios/App/build/Payload
-          cp -r "ios/App/build/InspireApp.xcarchive/Products/Applications/App.app" "ios/App/build/Payload/App.app" || true
-          cd ios/App/build
-          zip -r InspireApp-iOS.ipa Payload/ || true
+          mkdir -p ios/App/build/Payload out-ios
+          if [ -d "ios/App/build/InspireApp.xcarchive/Products/Applications/App.app" ]; then
+            cp -R "ios/App/build/InspireApp.xcarchive/Products/Applications/App.app" "ios/App/build/Payload/App.app"
+            cd ios/App/build
+            zip -r InspireApp-iOS-unsigned.ipa Payload/
+            cp InspireApp-iOS-unsigned.ipa ../../../out-ios/
+          else
+            echo "Archive/app not found — creating placeholder note"
+            echo "iOS unsigned archive was not produced (signing / Xcode constraints)." > out-ios/README-iOS.txt
+          fi
+          ls -la out-ios/ || true
 
-      - name: 📤 Upload iOS IPA/Framework
+      - name: Upload iOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: |
-            ios/App/build/InspireApp-iOS.ipa
-            ios/App/build/InspireApp.xcarchive/
+          path: out-ios/
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 14
 
   # ===========================================================================
-  # JOB 5 ─ Aggregate all outputs into ONE downloadable release bundle
+  # JOB 5 — Bundle + GitHub Release
   # ===========================================================================
   bundle-release:
-    name: 📦 Bundle All Platforms → Release
+    name: Bundle All Platforms → Release
     needs: [build-desktop, build-android, build-ios]
     runs-on: ubuntu-latest
-    if: always()
+    if: always() && github.event_name != 'pull_request'
     steps:
-      - name: 📥 Download all platform artifacts
+      - name: Download all platform artifacts
         uses: actions/download-artifact@v4
         with:
           path: all-builds/
+          merge-multiple: false
 
-      - name: 🗂️ Organize release bundle
+      - name: Organize release bundle
         run: |
-          mkdir -p release-bundle/{windows,macos,linux,android,ios}
-          cp -r all-builds/windows-exe/* release-bundle/windows/   2>/dev/null || true
-          cp -r all-builds/macos-dmg/* release-bundle/macos/     2>/dev/null || true
-          cp -r all-builds/linux-appimage/* release-bundle/linux/    2>/dev/null || true
-          cp -r all-builds/android-apk/* release-bundle/android/   2>/dev/null || true
-          cp -r all-builds/ios-ipa/* release-bundle/ios/        2>/dev/null || true
+          mkdir -p release-bundle/{windows,macos,linux,android,ios,web}
+          echo "=== Downloaded artifacts tree ==="
+          find all-builds -type f | sort || true
 
-      - name: 📤 Upload unified release bundle
+          cp -r all-builds/windows-exe/* release-bundle/windows/ 2>/dev/null || true
+          cp -r all-builds/macos-dmg/* release-bundle/macos/ 2>/dev/null || true
+          cp -r all-builds/linux-appimage/* release-bundle/linux/ 2>/dev/null || true
+          cp -r all-builds/android-apk/* release-bundle/android/ 2>/dev/null || true
+          cp -r all-builds/ios-ipa/* release-bundle/ios/ 2>/dev/null || true
+          cp -r all-builds/web-dist/* release-bundle/web/ 2>/dev/null || true
+
+          # Flat folder of shippable binaries for GitHub Release assets
+          mkdir -p release-assets
+          find release-bundle -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.apk' -o -name '*.ipa' -o -name '*.zip' \) -exec cp {} release-assets/ \;
+          # Also include any remaining platform files
+          find release-bundle -type f ! -name '*.blockmap' | while read -r f; do
+            base=$(basename "$f")
+            if [ ! -f "release-assets/$base" ]; then
+              cp "$f" "release-assets/" 2>/dev/null || true
+            fi
+          done
+
+          echo "=== Release assets ==="
+          ls -la release-assets/ || true
+          echo "=== Bundle tree ==="
+          find release-bundle -type f | sort || true
+
+      - name: Upload unified release bundle
         uses: actions/upload-artifact@v4
         with:
           name: InspireApp-All-Platforms-${{ github.sha }}
@@ -329,27 +449,32 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-      - name: 🚀 Create GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: InspireApp v1.0.0
+          tag_name: v1.0.${{ github.run_number }}
+          name: InspireApp v1.0.${{ github.run_number }}
           body: |
-            InspireApp Multi-Platform Production Release.
-            
-            ### Included Builds:
-            - **Windows**: `InspireApp Setup 1.0.0.exe` (or similar NSIS Installer)
-            - **macOS**: `InspireApp-1.0.0.dmg`
-            - **Linux**: `InspireApp-1.0.0.AppImage`
-            - **Android**: Capacitator Android App APK
-            - **iOS**: Unsigned iOS App IPA Framework
+            ## InspireApp Multi-Platform Release
+
+            **Commit:** `${{ github.sha }}`
+            **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            ### Included builds
+            | Platform | Artifact |
+            |----------|----------|
+            | Windows  | NSIS installer (`.exe`) |
+            | macOS    | Disk image (`.dmg`) |
+            | Linux    | AppImage |
+            | Android  | Debug APK |
+            | iOS      | Unsigned IPA / notes (no Apple signing cert) |
+            | Web      | Vite `dist` bundle (in artifact zip) |
+
+            Download platform-specific files from **Assets** below, or grab the full multi-platform artifact from the Actions run.
           draft: false
           prerelease: false
-          files: |
-            all-builds/windows-exe/**/*
-            all-builds/macos-dmg/**/*
-            all-builds/linux-appimage/**/*
-            all-builds/android-apk/**/*
-            all-builds/ios-ipa/**/*
+          generate_release_notes: true
+          files: release-assets/*
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
