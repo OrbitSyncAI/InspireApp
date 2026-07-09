@@ -27,6 +27,7 @@ env:
   APP_NAME: "InspireApp"
   # Pin exact Electron version (electron-builder rejects ranges)
   ELECTRON_VERSION: "31.7.7"
+  RELEASE_VERSION: "1.1.${{ github.run_number }}"
 
 jobs:
   # ===========================================================================
@@ -49,6 +50,10 @@ jobs:
         run: npm ci --prefer-offline
 
       - name: Vite production build
+        env:
+          VITE_APP_VERSION: ${{ env.RELEASE_VERSION }}
+          VITE_APP_BUILD: ${{ github.run_number }}-${{ github.sha }}
+          VITE_APP_PLATFORM: web
         run: npm run build
 
       - name: Upload web dist
@@ -64,7 +69,6 @@ jobs:
   # ===========================================================================
   build-desktop:
     name: Desktop — ${{ matrix.os-name }}
-    needs: build-web
     strategy:
       fail-fast: false
       matrix:
@@ -94,12 +98,6 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-
-      - name: Download web dist
-        uses: actions/download-artifact@v4
-        with:
-          name: web-dist
-          path: dist/
 
       - name: Cache Electron binaries
         uses: actions/cache@v4
@@ -131,6 +129,14 @@ jobs:
           echo "Electron install failed after retries"
           exit 1
 
+      - name: Build web bundle for ${{ matrix.os-name }}
+        shell: bash
+        env:
+          VITE_APP_VERSION: ${{ env.RELEASE_VERSION }}
+          VITE_APP_BUILD: ${{ github.run_number }}-${{ github.sha }}-${{ matrix.platform }}
+          VITE_APP_PLATFORM: ${{ matrix.platform }}
+        run: npm run build
+
       - name: Scaffold Electron main process + builder config
         shell: bash
         run: |
@@ -138,18 +144,27 @@ jobs:
           const { app, BrowserWindow } = require('electron');
           const path = require('path');
 
+          app.setAppUserModelId('ai.orbitsync.inspireapp');
+
           function createWindow() {
             const win = new BrowserWindow({
               width: 1280,
               height: 800,
+              minWidth: 1024,
+              minHeight: 680,
+              backgroundColor: '#f8f9fc',
+              titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+              trafficLightPosition: process.platform === 'darwin' ? { x: 18, y: 18 } : undefined,
               webPreferences: {
                 contextIsolation: true,
                 nodeIntegration: false,
+                sandbox: true,
               },
               title: 'InspireApp',
               autoHideMenuBar: true,
               show: false,
             });
+            win.setMenuBarVisibility(false);
             win.once('ready-to-show', () => win.show());
             win.loadFile(path.join(__dirname, 'dist', 'index.html'));
           }
@@ -182,10 +197,13 @@ jobs:
               - target: nsis
                 arch: [x64]
             artifactName: InspireApp-Setup-${version}.${ext}
+            legalTrademarks: InspireApp
           nsis:
             oneClick: false
             allowToChangeInstallationDirectory: true
             createDesktopShortcut: true
+            createStartMenuShortcut: true
+            shortcutName: InspireApp
           mac:
             target:
               - target: dmg
@@ -209,8 +227,10 @@ jobs:
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
           pkg.main = 'electron-main.cjs';
+          pkg.version = process.env.RELEASE_VERSION || pkg.version;
           pkg.description = pkg.description || 'InspireApp Desktop Application';
           pkg.author = pkg.author || 'OrbitSyncAI';
+          pkg.repository = pkg.repository || { type: 'git', url: 'https://github.com/OrbitSyncAI/InspireApp.git' };
           // Remove ESM type for main process packaging clarity (app still ships built dist)
           delete pkg.type;
           // Never set publish:null as a string provider — omit publish entirely
@@ -257,7 +277,6 @@ jobs:
   # ===========================================================================
   build-android:
     name: Android APK
-    needs: build-web
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -290,16 +309,17 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      - name: Download web dist
-        uses: actions/download-artifact@v4
-        with:
-          name: web-dist
-          path: dist/
-
       - name: Install dependencies + Capacitor
         run: |
           npm ci --prefer-offline
           npm install --save-dev @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 --prefer-offline --no-fund --no-audit
+
+      - name: Build web bundle for Android
+        env:
+          VITE_APP_VERSION: ${{ env.RELEASE_VERSION }}
+          VITE_APP_BUILD: ${{ github.run_number }}-${{ github.sha }}-android
+          VITE_APP_PLATFORM: android
+        run: npm run build
 
       - name: Initialize Capacitor & add Android
         run: |
@@ -320,7 +340,7 @@ jobs:
           mkdir -p out-android
           APK=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -n 1)
           if [ -n "$APK" ]; then
-            cp "$APK" out-android/InspireApp-1.0.0-debug.apk
+            cp "$APK" "out-android/InspireApp-${{ env.RELEASE_VERSION }}-android-debug.apk"
             ls -la out-android/
           else
             echo "No APK found"
@@ -340,7 +360,6 @@ jobs:
   # ===========================================================================
   build-ios:
     name: iOS IPA Framework
-    needs: build-web
     runs-on: macos-latest
     steps:
       - name: Checkout source
@@ -352,22 +371,24 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Download web dist
-        uses: actions/download-artifact@v4
-        with:
-          name: web-dist
-          path: dist/
-
       - name: Install dependencies + Capacitor iOS
         run: |
           npm ci --prefer-offline
           npm install --save-dev @capacitor/core@6 @capacitor/cli@6 @capacitor/ios@6 --prefer-offline --no-fund --no-audit
+
+      - name: Build web bundle for iOS
+        env:
+          VITE_APP_VERSION: ${{ env.RELEASE_VERSION }}
+          VITE_APP_BUILD: ${{ github.run_number }}-${{ github.sha }}-ios
+          VITE_APP_PLATFORM: ios
+        run: npm run build
 
       - name: Initialize Capacitor & add iOS
         run: |
           if [ ! -f capacitor.config.json ] && [ ! -f capacitor.config.ts ]; then
             npx cap init "InspireApp" "ai.orbitsync.inspireapp" --web-dir dist
           fi
+          node -e "const fs=require('fs');const p='capacitor.config.json';const c=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):{};c.appId='ai.orbitsync.inspireapp';c.appName='InspireApp';c.webDir='dist';c.ios={contentInset:'automatic',scrollEnabled:true,allowsLinkPreview:false};fs.writeFileSync(p,JSON.stringify(c,null,2));"
           npx cap add ios
           npx cap sync ios
 
@@ -417,9 +438,9 @@ jobs:
   # ===========================================================================
   bundle-release:
     name: Bundle All Platforms → Release
-    needs: [build-desktop, build-android, build-ios]
+    needs: [build-web, build-desktop, build-android, build-ios]
     runs-on: ubuntu-latest
-    if: always() && github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request'
     steps:
       - name: Download all platform artifacts
         uses: actions/download-artifact@v4
@@ -467,8 +488,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: InspireApp v1.0.${{ github.run_number }}
+          tag_name: v${{ env.RELEASE_VERSION }}
+          name: InspireApp v${{ env.RELEASE_VERSION }}
           body: |
             ## InspireApp Multi-Platform Release
 

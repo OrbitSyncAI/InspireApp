@@ -1,4 +1,4 @@
-export const categories = {
+﻿export const categories = {
   MOTIVATION:         { label: 'Motivation',          emoji: '🚀' },
   SUCCESS:            { label: 'Success',             emoji: '🏆' },
   TECH:               { label: 'Tech',                emoji: '💻' },
@@ -13,6 +13,7 @@ export const categories = {
   EDUCATION:          { label: 'Education',           emoji: '📚' },
   SPIRITUALITY:       { label: 'Spirituality',        emoji: '🙏' },
   NATURE:             { label: 'Nature',              emoji: '🌿' },
+  MINDSET:            { label: 'Mindset',             emoji: '\u{1F9ED}' },
   LIKED:              { label: 'Liked Quotes',        emoji: '❤️' }
 }
 
@@ -31,6 +32,7 @@ export const gradients = {
   EDUCATION:          ['#11998E', '#38EF7D'],
   SPIRITUALITY:       ['#8360C3', '#2EBF91'],
   NATURE:             ['#2D6A4F', '#52B788'],
+  MINDSET:            ['#475569', '#2563EB'],
   LIKED:              ['#E91E63', '#9C27B0']
 }
 
@@ -275,5 +277,51 @@ export const allQuotes = [
   { text: 'Nature is not a place to visit. It is home. We are not separate from nature — we are a part of it.', author: 'Gary Snyder', category: 'NATURE' },
   { text: 'To sit in the shade on a fine day and look upon verdure is the most perfect refreshment. Simple pleasures are the sweetest.', author: 'Jane Austen', category: 'NATURE' },
   { text: 'If you truly love nature, you will find beauty everywhere. Even in the cracks of the sidewalk, life finds a way.', author: 'Vincent Van Gogh', category: 'NATURE' },
-  { text: 'The mountains are calling and I must go. There is a wildness in the human spirit that only nature can satisfy.', author: 'John Muir', category: 'NATURE' }
+  { text: 'The mountains are calling and I must go. There is a wildness in the human spirit that only nature can satisfy.', author: 'John Muir', category: 'NATURE' },
+
+  // ── NEW v1.1.0 QUOTES ──
+  { text: 'Discipline is choosing what you want most over what you want now. Every small delayed gratification compounds into a future you will thank yourself for.', author: 'Sohel Khan', category: 'MOTIVATION' },
+  { text: 'Consistency beats intensity. Showing up average every day beats being extraordinary once a month.', author: 'Sohel Khan', category: 'MOTIVATION' },
+  { text: 'Your environment is either a fuel or a friction. Design your space, your circle, and your inputs like an athlete designs training.', author: 'Sohel Khan', category: 'SUCCESS' },
+  { text: 'Ship imperfect work. Feedback from the real world is smarter than endless polishing in private.', author: 'Sohel Khan', category: 'SUCCESS' },
+  { text: 'AI will not replace you. A person who uses AI well might. Learn the tools, keep the judgment.', author: 'Sohel Khan', category: 'TECH' },
+  { text: 'Write code for humans first, machines second. Clarity is a feature.', author: 'Sohel Khan', category: 'TECH' },
+  { text: 'Strong opinions, loosely held. Defend ideas with evidence, not ego — and change them when better data arrives.', author: 'Sohel Khan', category: 'CRITICAL_THINKING' },
+  { text: 'If a claim has no cost to be wrong, treat it lightly. Truth survives scrutiny; slogans fear it.', author: 'Sohel Khan', category: 'CRITICAL_THINKING' },
+  { text: 'प्रेम सिर्फ दिल की बात नहीं, रोज़ की छोटी-छोटी इज्ज़त है। जो रोज़ सम्मान देते हैं, वही रिश्ते लंबे चलते हैं।', author: 'Sohel Khan', category: 'HINDI' },
+  { text: 'आज का छोटा सा सुधार, कल की बड़ी सफलता बन जाता है। रोज़ एक प्रतिशत बेहतर बनो।', author: 'Sohel Khan', category: 'HINDI' },
+  { text: 'خاموشی بھی ایک جواب ہے۔ ہر بات کا جواب دینا ضروری نہیں۔', author: 'Sohel Khan', category: 'URDU' },
+  { text: 'اپنی صبح کو اتنی طاقتور بناؤ کہ شام خود کامیاب ہو جائے۔', author: 'Sohel Khan', category: 'URDU' },
+  { text: 'Love is a daily practice of kindness, not a single dramatic speech. The quiet consistent care is what lasts.', author: 'Sohel Khan', category: 'LOVE' },
+  { text: 'Protect your peace the way you protect your passwords — carefully, and without apology.', author: 'Sohel Khan', category: 'WISDOM' },
+  { text: 'A calm mind is a competitive advantage. Rest is not laziness; it is maintenance.', author: 'Sohel Khan', category: 'LIFE' },
+  { text: 'I told my goals I was busy. They left. Now I keep better company.', author: 'Sohel Khan', category: 'FUNNY' },
+  { text: 'Leaders eat last, listen first, and credit the team publicly. Authority is a service, not a throne.', author: 'Sohel Khan', category: 'LEADERSHIP' },
+  { text: 'Culture is what people do when nobody is watching. Set the standard, then live it.', author: 'Sohel Khan', category: 'LEADERSHIP' },
+  { text: 'Education is not filling a bucket; it is lighting a fire that keeps seeking fuel.', author: 'Sohel Khan', category: 'EDUCATION' },
+  { text: 'Read one page more than yesterday. Over a year you become a different person.', author: 'Sohel Khan', category: 'EDUCATION' },
+  { text: 'Gratitude turns what you have into enough, and enough into a starting point for generosity.', author: 'Sohel Khan', category: 'SPIRITUALITY' },
+  { text: 'Stillness is not empty. In silence you finally hear what your life has been trying to say.', author: 'Sohel Khan', category: 'SPIRITUALITY' },
+  { text: 'Nature does not hurry, yet everything is accomplished. Align your pace with seasons, not only clocks.', author: 'Sohel Khan', category: 'NATURE' },
+  { text: 'Walk outside without headphones once a week. Let the world remind you that you are part of something larger.', author: 'Sohel Khan', category: 'NATURE' },
+  { text: 'Start before confidence arrives. Confidence is often the receipt, not the payment.', author: 'Sohel Khan', category: 'MOTIVATION' },
+  { text: 'A focused hour can beat a distracted day. Protect your best attention like prime real estate.', author: 'Sohel Khan', category: 'SUCCESS' },
+  { text: 'Good technology should make people feel more capable, not more confused.', author: 'Sohel Khan', category: 'TECH' },
+  { text: 'Ask better questions before demanding faster answers. Direction matters more than speed.', author: 'Sohel Khan', category: 'CRITICAL_THINKING' },
+  { text: 'Love grows where respect is repeated, especially on ordinary days.', author: 'Sohel Khan', category: 'LOVE' },
+  { text: 'Wisdom is knowing which battles deserve your energy and which deserve your silence.', author: 'Sohel Khan', category: 'WISDOM' },
+  { text: 'A simple life is not an empty life. It is a life with fewer things stealing your attention.', author: 'Sohel Khan', category: 'LIFE' },
+  { text: 'My productivity plan was perfect until morning arrived with opinions.', author: 'Sohel Khan', category: 'FUNNY' },
+  { text: 'The best leaders make responsibility feel shared and credit feel abundant.', author: 'Sohel Khan', category: 'LEADERSHIP' },
+  { text: 'Learning becomes powerful when notes turn into practice and practice turns into character.', author: 'Sohel Khan', category: 'EDUCATION' },
+  { text: 'Before changing the world, make your own heart a place where peace can live.', author: 'Sohel Khan', category: 'SPIRITUALITY' },
+  { text: 'The sky changes color without asking permission. Let your growth be just as natural.', author: 'Sohel Khan', category: 'NATURE' },
+  { text: 'Your mindset is the room where every decision is made. Keep it clean, honest, and ready for brave work.', author: 'Sohel Khan', category: 'MINDSET' },
+  { text: 'A strong mindset does not remove problems. It gives you a better posture while you solve them.', author: 'Sohel Khan', category: 'MINDSET' },
+  { text: 'Train your thoughts like you train your body. Repetition turns weak attention into steady strength.', author: 'Sohel Khan', category: 'MINDSET' },
+  { text: 'Do not let one bad hour rename your whole day. Reset quickly and keep moving with dignity.', author: 'Sohel Khan', category: 'MINDSET' },
+  { text: 'Growth begins when your excuses start sounding less convincing than your future.', author: 'Sohel Khan', category: 'MINDSET' },
+  { text: 'The mind becomes lighter when it stops arguing with reality and starts building from it.', author: 'Sohel Khan', category: 'MINDSET' },
+  { text: 'Confidence is useful, but commitment is stronger. Commitment keeps working even when confidence is quiet.', author: 'Sohel Khan', category: 'MINDSET' },
+  { text: 'Protect your attention. Whatever owns your focus slowly designs your life.', author: 'Sohel Khan', category: 'MINDSET' },
 ]
