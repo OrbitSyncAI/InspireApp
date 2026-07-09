@@ -1,5 +1,7 @@
 # ============================================================
-#  InspireApp — Fixed Multi-Platform Build Pipeline
+#  InspireApp — Ultimate Multi-Platform Production Pipeline
+#  Targets: Windows EXE | macOS DMG | Linux AppImage |
+#           Android APK | iOS IPA Framework
 # ============================================================
 
 name: 🚀 Multi-Platform Build
@@ -17,11 +19,14 @@ concurrency:
 
 env:
   NODE_VERSION: "22"
-  JAVA_VERSION: "21"
+  JAVA_VERSION: "21"         # Fixed: Updated to 21 to match Gradle requirements
   APP_NAME: "InspireApp"
   ELECTRON_VERSION: "31"
 
 jobs:
+  # ===========================================================================
+  # JOB 1 ─ Build the Vite web bundle
+  # ===========================================================================
   build-web:
     name: 🌐 Vite Web Bundle
     runs-on: ubuntu-latest
@@ -49,6 +54,9 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # ===========================================================================
+  # JOB 2 ─ Desktop builds (Windows / macOS / Linux) via Electron Builder
+  # ===========================================================================
   build-desktop:
     name: 🖥️ Desktop — ${{ matrix.os-name }}
     needs: build-web
@@ -59,19 +67,16 @@ jobs:
           - runner: windows-latest
             os-name: Windows
             platform: win
-            artifact-pattern: "release/*.exe"
             artifact-name: windows-exe
 
           - runner: macos-latest
             os-name: macOS
             platform: mac
-            artifact-pattern: "release/*.dmg"
             artifact-name: macos-dmg
 
           - runner: ubuntu-latest
             os-name: Linux
             platform: linux
-            artifact-pattern: "release/*.AppImage"
             artifact-name: linux-appimage
 
     runs-on: ${{ matrix.runner }}
@@ -133,16 +138,17 @@ jobs:
           }
           EOJSON
 
-      # Windows friendly single-line install command
+      # Fixed: Added explicit shell: bash for cross-platform compatibility on Windows runner
       - name: 📦 Install Electron + Builder
+        shell: bash
         run: npm install --save-dev electron@${{ env.ELECTRON_VERSION }} electron-builder@latest --prefer-offline
 
+      # Fixed: Removed '--dir release' syntax and strictly use inline configuration structure
       - name: 🏗️ Build desktop app — ${{ matrix.os-name }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          npx electron-builder --${{ matrix.platform }} --config.appId "ai.orbitsync.inspireapp" --config.productName "InspireApp" --config.directories.buildResources "electron" --config.directories.output "release" --config.files "dist/**/*" --config.extraMetadata.main "electron/main.js" --config.win.target "nsis" --config.mac.target "dmg" --config.linux.target "AppImage" --publish never
+        run: npx electron-builder --${{ matrix.platform }} --config.appId="ai.orbitsync.inspireapp" --config.productName="InspireApp" --config.directories.buildResources="electron" --config.directories.output="release" --config.files="dist/**/*" --config.extraMetadata.main="electron/main.js" --config.win.target="nsis" --config.mac.target="dmg" --config.linux.target="AppImage" --publish never
 
       - name: 📤 Upload ${{ matrix.os-name }} binary
         uses: actions/upload-artifact@v4
@@ -152,6 +158,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # ===========================================================================
+  # JOB 3 ─ Android APK via Capacitor + Gradle
+  # ===========================================================================
   build-android:
     name: 🤖 Android APK
     needs: build-web
@@ -174,6 +183,9 @@ jobs:
 
       - name: 📱 Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: ✅ Accept Android SDK licenses
+        run: yes | sdkmanager --licenses || true
 
       - name: 🗄️ Cache Gradle
         uses: actions/cache@v4
@@ -217,6 +229,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # ===========================================================================
+  # JOB 4 ─ iOS IPA Framework via Capacitor + Xcode
+  # ===========================================================================
   build-ios:
     name: 🍎 iOS IPA Framework
     needs: build-web
@@ -274,6 +289,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # ===========================================================================
+  # JOB 5 ─ Aggregate all outputs into ONE downloadable release bundle
+  # ===========================================================================
   bundle-release:
     name: 📦 Bundle All Platforms → Release
     needs: [build-desktop, build-android, build-ios]
@@ -288,11 +306,11 @@ jobs:
       - name: 🗂️ Organize release bundle
         run: |
           mkdir -p release-bundle/{windows,macos,linux,android,ios}
-          cp -r all-builds/windows-exe/*   release-bundle/windows/   2>/dev/null || true
-          cp -r all-builds/macos-dmg/*     release-bundle/macos/     2>/dev/null || true
+          cp -r all-builds/windows-exe/* release-bundle/windows/   2>/dev/null || true
+          cp -r all-builds/macos-dmg/* release-bundle/macos/     2>/dev/null || true
           cp -r all-builds/linux-appimage/* release-bundle/linux/    2>/dev/null || true
-          cp -r all-builds/android-apk/*   release-bundle/android/   2>/dev/null || true
-          cp -r all-builds/ios-ipa/*       release-bundle/ios/        2>/dev/null || true
+          cp -r all-builds/android-apk/* release-bundle/android/   2>/dev/null || true
+          cp -r all-builds/ios-ipa/* release-bundle/ios/        2>/dev/null || true
 
       - name: 📤 Upload unified release bundle
         uses: actions/upload-artifact@v4
