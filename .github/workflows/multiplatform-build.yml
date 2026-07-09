@@ -105,7 +105,7 @@ jobs:
             ~\AppData\Local\electron\Cache
           key: electron-${{ env.ELECTRON_VERSION }}-${{ matrix.runner }}
 
-      # Permanent Fix: Scaffold packages DIRECTLY inside the dist folder to avoid ASAR path corruption
+      # Scaffold exact production assets direct in dist
       - name: 🔧 Scaffold Electron Wrapper in Dist
         shell: bash
         run: |
@@ -141,12 +141,12 @@ jobs:
         shell: bash
         run: npm install --save-dev electron@${{ env.ELECTRON_VERSION }} electron-builder@latest --prefer-offline
 
-      # Permanent Fix: Configuration explicitly rewritten to build out of the consolidated 'dist' directory
+      # Fixed: Added explicit projectDir mapping to 'dist' folder so asset references never break
       - name: 🏗️ Build desktop app — ${{ matrix.os-name }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --${{ matrix.platform }} --config.appId="ai.orbitsync.inspireapp" --config.productName="InspireApp" --config.directories.output="release" --config.files="dist/**/*" --config.extraMetadata.main="dist/main.js" --config.win.target="nsis" --config.mac.target="dmg" --config.linux.target="AppImage" --publish never
+        run: npx electron-builder --${{ matrix.platform }} --config.projectDir="dist" --config.appId="ai.orbitsync.inspireapp" --config.productName="InspireApp" --config.directories.output="../release" --config.win.target="nsis" --config.mac.target="dmg" --config.linux.target="AppImage" --publish never
 
       - name: 📤 Upload ${{ matrix.os-name }} binary
         uses: actions/upload-artifact@v4
