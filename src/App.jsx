@@ -2,16 +2,20 @@
 import { categories, gradients, allQuotes, currentYear } from './data'
 import { staticPages } from './pagesContent'
 import { APP_NAME, APP_VERSION, APP_BUILD, RELEASES_PAGE, detectPlatform, platformLabel } from './version'
-import { checkForUpdates, openDownload } from './updateService'
+import { checkForUpdates } from './updateService'
 
 const tabKeys = Object.keys(categories).filter(k => k !== 'LIKED')
 const PER_PAGE = 10
 const AI_SETTINGS_KEY = 'inspire-ai-settings'
 const AI_SAVED_KEY = 'inspire-ai-saved-quotes'
 const AI_PROVIDERS = {
-  gemini: { label: 'Gemini', defaultModel: 'gemini-1.5-flash' },
-  openai: { label: 'ChatGPT', defaultModel: 'gpt-4o-mini' },
-  claude: { label: 'Claude', defaultModel: 'claude-3-5-haiku-20241022' },
+  gemini: { label: 'Gemini', defaultModel: 'gemini-2.0-flash', models: ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro-latest'] },
+  openai: { label: 'ChatGPT', defaultModel: 'gpt-4o-mini', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini'] },
+  claude: { label: 'Claude', defaultModel: 'claude-3-5-haiku-20241022', models: ['claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022'] },
+  groq: { label: 'Groq', defaultModel: 'llama-3.1-8b-instant', models: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768'] },
+  mistral: { label: 'Mistral', defaultModel: 'mistral-small-latest', models: ['mistral-small-latest', 'mistral-large-latest'] },
+  openrouter: { label: 'OpenRouter', defaultModel: 'openai/gpt-4o-mini', models: ['openai/gpt-4o-mini', 'google/gemini-flash-1.5', 'anthropic/claude-3.5-haiku'] },
+  deepseek: { label: 'DeepSeek', defaultModel: 'deepseek-chat', models: ['deepseek-chat', 'deepseek-reasoner'] },
 }
 
 function favReducer(state, action) {
@@ -35,13 +39,13 @@ function dailyQuoteIndex() {
 function loadAiSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) || '{}')
+    const providers = Object.fromEntries(Object.entries(AI_PROVIDERS).map(([key, meta]) => [
+      key,
+      { apiKey: '', model: meta.defaultModel, ...(saved.providers?.[key] || {}) },
+    ]))
     return {
-      defaultProvider: saved.defaultProvider || 'gemini',
-      providers: {
-        gemini: { apiKey: '', model: AI_PROVIDERS.gemini.defaultModel, ...(saved.providers?.gemini || {}) },
-        openai: { apiKey: '', model: AI_PROVIDERS.openai.defaultModel, ...(saved.providers?.openai || {}) },
-        claude: { apiKey: '', model: AI_PROVIDERS.claude.defaultModel, ...(saved.providers?.claude || {}) },
-      },
+      defaultProvider: AI_PROVIDERS[saved.defaultProvider] ? saved.defaultProvider : 'gemini',
+      providers,
     }
   } catch {
     return {
@@ -89,10 +93,20 @@ function downloadQuoteImage(quote, label = 'Inspire') {
   if (line) ctx.fillText(line, 540, y)
   ctx.font = '500 40px system-ui, sans-serif'
   ctx.fillText(`— ${quote.author || 'AI'}`, 540, Math.min(y + 110, 1120))
-  const link = document.createElement('a')
-  link.href = canvas.toDataURL('image/png')
-  link.download = 'inspire-quote.png'
-  link.click()
+  canvas.toBlob(blob => {
+    if (!blob) return
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'inspire-quote.png'
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    setTimeout(() => {
+      URL.revokeObjectURL(url)
+      link.remove()
+    }, 1200)
+  }, 'image/png')
 }
 
 export default function App() {
@@ -214,24 +228,6 @@ export default function App() {
     navigator.clipboard.writeText(quote.text).then(() => setCopied(true)).catch(() => {})
   }, [quote])
 
-  const shareQuote = useCallback(async () => {
-    if (!quote) return
-    const payload = { title: 'Inspire Quote', text: `"${quote.text}" — ${quote.author}` }
-    try {
-      if (navigator.share) {
-        await navigator.share(payload)
-      } else {
-        await navigator.clipboard.writeText(payload.text)
-        setCopied(true)
-      }
-    } catch {
-      try {
-        await navigator.clipboard.writeText(payload.text)
-        setCopied(true)
-      } catch {}
-    }
-  }, [quote])
-
   const copyListQuote = useCallback((text) => {
     navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => {})
   }, [])
@@ -254,11 +250,10 @@ export default function App() {
       if (e.key === 'ArrowRight') { e.preventDefault(); nextQuote() }
       if (e.key === 'f' || e.key === 'F') { e.preventDefault(); toggleFav() }
       if (e.key === 'c' || e.key === 'C') { e.preventDefault(); copyQuote() }
-      if (e.key === 's' || e.key === 'S') { e.preventDefault(); shareQuote() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [page, viewMode, prevQuote, nextQuote, toggleFav, copyQuote, shareQuote])
+  }, [page, viewMode, prevQuote, nextQuote, toggleFav, copyQuote])
 
   const prevListPage = () => setListPage(p => Math.max(0, p - 1))
   const nextListPage = () => setListPage(p => Math.min(totalPages - 1, p + 1))
@@ -335,7 +330,6 @@ export default function App() {
         <div className="oc-version-bottom">
           <span>{APP_NAME}</span>
           <strong>v{APP_VERSION}</strong>
-          <small>Build {APP_BUILD}</small>
         </div>
       </nav>
 
@@ -385,7 +379,7 @@ export default function App() {
                       <span>{categories.LIKED.emoji}</span> {categories.LIKED.label} ({favorites.length})
                     </button>
                   </div>
-                  <p className="side-hint">Keyboard: ← → navigate · F favorite · C copy · S share</p>
+                  <p className="side-hint">Keyboard: ← → navigate · F favorite · C copy</p>
                   {currentPlatform === 'windows' && (
                     <div className="windows-ready-box">
                       <strong>Windows Desktop</strong>
@@ -477,7 +471,6 @@ export default function App() {
                           {isFav ? '❤️' : '🤍'}
                         </button>
                         <button className="action-btn" onClick={copyQuote} title="Copy quote only">📋</button>
-                        <button className="action-btn" onClick={shareQuote} title="Share">📤</button>
                         <button className="action-btn" onClick={() => downloadQuoteImage(quote)} title="Download image">🖼️</button>
                       </div>
                       {copied && <p className="copied-feedback" style={{ color: g1 }}>✅ Copied!</p>}
@@ -656,23 +649,51 @@ async function callAiProvider(provider, config, prompt) {
   if (!key) throw new Error(`Please add ${AI_PROVIDERS[provider]?.label || provider} API key first.`)
 
   if (provider === 'gemini') {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-    })
-    if (!res.ok) throw new Error(`Gemini error ${res.status}`)
-    const json = await res.json()
-    return json.candidates?.[0]?.content?.parts?.map(p => p.text).join('\n') || ''
+    const modelsToTry = [...new Set([model, 'gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash'])]
+    let lastStatus = ''
+    for (const geminiModel of modelsToTry) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      })
+      if (res.status === 404) {
+        lastStatus = '404'
+        continue
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`Gemini error ${res.status}${text ? `: ${text.slice(0, 120)}` : ''}`)
+      }
+      const json = await res.json()
+      return json.candidates?.[0]?.content?.parts?.map(p => p.text).join('\n') || ''
+    }
+    throw new Error(`Gemini error ${lastStatus || 'model not available'}. Try gemini-2.0-flash or check your API key.`)
   }
 
-  if (provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const openAiLikeEndpoints = {
+    openai: 'https://api.openai.com/v1/chat/completions',
+    groq: 'https://api.groq.com/openai/v1/chat/completions',
+    mistral: 'https://api.mistral.ai/v1/chat/completions',
+    openrouter: 'https://openrouter.ai/api/v1/chat/completions',
+    deepseek: 'https://api.deepseek.com/chat/completions',
+  }
+
+  if (openAiLikeEndpoints[provider]) {
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }
+    if (provider === 'openrouter') {
+      headers['HTTP-Referer'] = 'https://github.com/OrbitSyncAI/InspireApp'
+      headers['X-Title'] = 'InspireApp'
+    }
+    const res = await fetch(openAiLikeEndpoints[provider], {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      headers,
       body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.8 }),
     })
-    if (!res.ok) throw new Error(`ChatGPT error ${res.status}`)
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`${AI_PROVIDERS[provider]?.label || provider} error ${res.status}${text ? `: ${text.slice(0, 120)}` : ''}`)
+    }
     const json = await res.json()
     return json.choices?.[0]?.message?.content || ''
   }
@@ -697,6 +718,7 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
   const [generated, setGenerated] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [savedMessage, setSavedMessage] = useState('')
 
   useEffect(() => { setProvider(settings.defaultProvider) }, [settings.defaultProvider])
 
@@ -708,6 +730,16 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
         [key]: { ...prev.providers[key], ...patch },
       },
     }))
+  }
+
+  const saveSettings = () => {
+    try {
+      localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(settings))
+      setSavedMessage('AI settings saved on this device.')
+      setTimeout(() => setSavedMessage(''), 1800)
+    } catch {
+      setSavedMessage('Could not save AI settings on this device.')
+    }
   }
 
   const generate = async () => {
@@ -750,9 +782,16 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
               <div key={key} className="ai-provider-card">
                 <strong>{meta.label}</strong>
                 <input type="password" placeholder={`${meta.label} API key`} value={settings.providers[key]?.apiKey || ''} onChange={e => updateProvider(key, { apiKey: e.target.value })} />
+                <select value={settings.providers[key]?.model || meta.defaultModel} onChange={e => updateProvider(key, { model: e.target.value })}>
+                  {meta.models.map(modelName => <option key={modelName} value={modelName}>{modelName}</option>)}
+                </select>
                 <input placeholder="Model" value={settings.providers[key]?.model || meta.defaultModel} onChange={e => updateProvider(key, { model: e.target.value })} />
               </div>
             ))}
+          </div>
+          <div className="ai-save-row">
+            <button className="cta-btn" onClick={saveSettings}>Save AI Settings</button>
+            {savedMessage && <span>{savedMessage}</span>}
           </div>
         </section>
 
@@ -830,7 +869,6 @@ function UpdatesPage() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [pendingUpdate, setPendingUpdate] = useState(null)
-  const [installing, setInstalling] = useState(false)
   const [updateNotice, setUpdateNotice] = useState('')
   const platform = detectPlatform()
 
@@ -921,9 +959,9 @@ function UpdatesPage() {
                   <div className="download-box">
                     <p>Recommended for <strong>{platformLabel(result.platform)}</strong>:</p>
                     <button className="cta-btn" onClick={() => setPendingUpdate(result)}>
-                      ⬇️ Download & Update v{result.latestVersion}
+                      ⬇️ Download v{result.latestVersion}
                     </button>
-                    <p className="small-note">On Android, the app downloads the update inside the app and then shows the system install prompt. Windows, macOS, Linux, and iOS still use the operating-system installer rules for final installation.</p>
+                    <p className="small-note">This opens the matching GitHub asset for your device, such as Android APK on Android and Windows installer on Windows.</p>
                   </div>
                 ) : (
                   <div className="download-box">
@@ -956,21 +994,19 @@ function UpdatesPage() {
         <div className="update-modal-backdrop" onClick={() => setPendingUpdate(null)}>
           <div className="update-modal" onClick={e => e.stopPropagation()}>
             <h2>Update to v{pendingUpdate.latestVersion}</h2>
-            <p>InspireApp will download the recommended update for <strong>{platformLabel(pendingUpdate.platform)}</strong>. Android and desktop builds start the download from inside the app, then the system installer asks for final permission.</p>
+            <p>InspireApp selected the recommended GitHub download for <strong>{platformLabel(pendingUpdate.platform)}</strong>. Android gets the APK, Windows gets the installer, macOS gets the zip, and Linux gets the AppImage.</p>
             <div className="update-modal-actions">
               <button className="cta-btn cta-secondary" onClick={() => setPendingUpdate(null)}>Cancel</button>
-              <button className="cta-btn" disabled={installing} onClick={async () => {
-                setInstalling(true)
-                try {
-                  await openDownload(pendingUpdate.asset.url, pendingUpdate.asset.name)
-                  setUpdateNotice(`Update download started for v${pendingUpdate.latestVersion}.`)
+              <a
+                className="cta-btn"
+                href={pendingUpdate.asset.url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => {
+                  setUpdateNotice(`GitHub download opened for v${pendingUpdate.latestVersion}.`)
                   setPendingUpdate(null)
-                } catch (e) {
-                  setUpdateNotice(e.message || 'Could not start update download.')
-                } finally {
-                  setInstalling(false)
-                }
-              }}>{installing ? 'Starting...' : `Update Now v${pendingUpdate.latestVersion}`}</button>
+                }}
+              >Open GitHub Download v{pendingUpdate.latestVersion}</a>
             </div>
           </div>
         </div>

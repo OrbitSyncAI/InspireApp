@@ -529,7 +529,8 @@ body {
 }
 .ai-default-row,
 .ai-chatbar,
-.ai-actions {
+.ai-actions,
+.ai-save-row {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -551,6 +552,7 @@ body {
   background: var(--static-bg);
 }
 .ai-provider-card input,
+.ai-provider-card select,
 .ai-default-row select,
 .ai-chatbar select,
 .ai-chatbox textarea {
@@ -562,6 +564,10 @@ body {
   color: var(--text-primary);
   padding: 10px 12px;
   font: inherit;
+}
+.ai-save-row span {
+  color: var(--static-text);
+  font-weight: 700;
 }
 .ai-default-row label { font-weight: 800; color: var(--static-heading); }
 .ai-default-row select,
