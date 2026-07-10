@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useReducer, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useReducer, useMemo, useRef } from 'react'
 import { categories, gradients, allQuotes, currentYear } from './data'
 import { staticPages } from './pagesContent'
 import { APP_NAME, APP_VERSION, APP_BUILD, RELEASES_PAGE, detectPlatform, platformLabel } from './version'
@@ -8,15 +8,21 @@ const tabKeys = Object.keys(categories).filter(k => k !== 'LIKED')
 const PER_PAGE = 10
 const AI_SETTINGS_KEY = 'inspire-ai-settings'
 const AI_SAVED_KEY = 'inspire-ai-saved-quotes'
+const AI_LIKED_KEY = 'inspire-ai-liked-quotes'
 const AI_PROVIDERS = {
-  gemini: { label: 'Gemini', defaultModel: 'gemini-2.0-flash', models: ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro-latest'] },
-  openai: { label: 'ChatGPT', defaultModel: 'gpt-4o-mini', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini'] },
-  claude: { label: 'Claude', defaultModel: 'claude-3-5-haiku-20241022', models: ['claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022'] },
-  groq: { label: 'Groq', defaultModel: 'llama-3.1-8b-instant', models: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768'] },
-  mistral: { label: 'Mistral', defaultModel: 'mistral-small-latest', models: ['mistral-small-latest', 'mistral-large-latest'] },
-  openrouter: { label: 'OpenRouter', defaultModel: 'openai/gpt-4o-mini', models: ['openai/gpt-4o-mini', 'google/gemini-flash-1.5', 'anthropic/claude-3.5-haiku'] },
+  gemini: { label: 'Gemini', defaultModel: 'gemini-3.1-flash-lite', models: ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'] },
+  openai: { label: 'ChatGPT', defaultModel: 'gpt-4o-mini', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1', 'o4-mini', 'o3-mini'] },
+  claude: { label: 'Claude', defaultModel: 'claude-3-5-haiku-20241022', models: ['claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022', 'claude-3-7-sonnet-latest', 'claude-3-opus-20240229'] },
+  groq: { label: 'Groq', defaultModel: 'llama-3.1-8b-instant', models: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
+  mistral: { label: 'Mistral', defaultModel: 'mistral-small-latest', models: ['mistral-small-latest', 'mistral-medium-latest', 'mistral-large-latest', 'open-mistral-nemo', 'codestral-latest'] },
+  openrouter: { label: 'OpenRouter', defaultModel: 'openai/gpt-4o-mini', models: ['openai/gpt-4o-mini', 'openai/gpt-4o', 'google/gemini-flash-1.5', 'anthropic/claude-3.5-haiku', 'meta-llama/llama-3.1-8b-instruct', 'mistralai/mistral-small'] },
   deepseek: { label: 'DeepSeek', defaultModel: 'deepseek-chat', models: ['deepseek-chat', 'deepseek-reasoner'] },
 }
+const AI_LANGUAGES = [
+  'Hindi', 'English', 'Hinglish', 'Urdu', 'Arabic', 'Bengali', 'Tamil', 'Telugu', 'Marathi', 'Gujarati', 'Punjabi', 'Kannada', 'Malayalam', 'Odia', 'Assamese', 'Sanskrit',
+  'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Russian', 'Chinese', 'Japanese', 'Korean', 'Turkish', 'Persian', 'Indonesian', 'Malay', 'Thai', 'Vietnamese',
+  'Dutch', 'Greek', 'Polish', 'Ukrainian', 'Romanian', 'Czech', 'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Hebrew', 'Swahili',
+]
 
 function favReducer(state, action) {
   switch (action.type) {
@@ -59,40 +65,143 @@ function loadSavedAiQuotes() {
   try { return JSON.parse(localStorage.getItem(AI_SAVED_KEY) || '[]') } catch { return [] }
 }
 
+function loadLikedAiQuotes() {
+  try { return JSON.parse(localStorage.getItem(AI_LIKED_KEY) || '[]') } catch { return [] }
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    try {
+      const area = document.createElement('textarea')
+      area.value = text
+      area.setAttribute('readonly', '')
+      area.style.position = 'fixed'
+      area.style.left = '-9999px'
+      document.body.appendChild(area)
+      area.select()
+      const ok = document.execCommand('copy')
+      area.remove()
+      return ok
+    } catch {
+      return false
+    }
+  }
+}
+
 function downloadQuoteImage(quote, label = 'Inspire') {
   if (!quote) return
   const canvas = document.createElement('canvas')
   canvas.width = 1080
   canvas.height = 1350
   const ctx = canvas.getContext('2d')
+
+  // Curated premium gradients/themes
+  const themes = [
+    { bgStart: '#0f172a', bgEnd: '#1e1b4b', accent: '#f59e0b', text: '#ffffff', blobs: ['#ec4899', '#6366f1', '#14b8a6'] },
+    { bgStart: '#064e3b', bgEnd: '#022c22', accent: '#34d399', text: '#f0fdf4', blobs: ['#059669', '#10b981', '#fbbf24'] },
+    { bgStart: '#311042', bgEnd: '#12021c', accent: '#f472b6', text: '#fdf2f8', blobs: ['#db2777', '#7c3aed', '#f43f5e'] },
+    { bgStart: '#1c1917', bgEnd: '#0c0a09', accent: '#fb923c', text: '#fafaf9', blobs: ['#ea580c', '#eab308', '#dc2626'] },
+    { bgStart: '#0f172a', bgEnd: '#020617', accent: '#38bdf8', text: '#f0f9ff', blobs: ['#2563eb', '#06b6d4', '#4f46e5'] },
+  ]
+  const theme = themes[Math.floor(Math.random() * themes.length)]
+
+  // 1. Draw solid background
   const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height)
-  grad.addColorStop(0, '#667EEA')
-  grad.addColorStop(1, '#F5576C')
+  grad.addColorStop(0, theme.bgStart)
+  grad.addColorStop(1, theme.bgEnd)
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.fillStyle = 'rgba(255,255,255,0.16)'
-  ctx.fillRect(70, 90, 940, 1170)
-  ctx.fillStyle = '#FFFFFF'
+
+  // 2. Draw glowing mesh blobs
+  theme.blobs.forEach((color, idx) => {
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    const x = idx === 0 ? 200 : idx === 1 ? 880 : 540
+    const y = idx === 0 ? 300 : idx === 1 ? 1000 : 675
+    const radius = 300 + Math.random() * 200
+    const radGrad = ctx.createRadialGradient(x, y, 0, x, y, radius)
+    radGrad.addColorStop(0, color + '77') // Semi-transparent
+    radGrad.addColorStop(0.5, color + '22')
+    radGrad.addColorStop(1, 'transparent')
+    ctx.fillStyle = radGrad
+    ctx.beginPath()
+    ctx.arc(x, y, radius, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  })
+
+  // 3. Draw glassmorphism card container (Darker semi-transparent card)
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.65)'
+  ctx.beginPath()
+  ctx.roundRect(80, 100, 920, 1150, 48)
+  ctx.fill()
+
+  // Inner card glow border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'
+  ctx.lineWidth = 4
+  ctx.stroke()
+
+  // 4. Header Text
+  ctx.fillStyle = theme.accent
   ctx.textAlign = 'center'
-  ctx.font = '800 54px system-ui, sans-serif'
-  ctx.fillText(label, 540, 190)
-  ctx.font = '600 50px system-ui, sans-serif'
-  const words = String(quote.text || '').split(/\s+/)
+  ctx.font = '800 48px system-ui, -apple-system, sans-serif'
+  ctx.fillText(label.toUpperCase(), 540, 190)
+
+  // Decorative quotes icon
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'
+  ctx.font = '900 320px Georgia, serif'
+  ctx.fillText('“', 220, 440)
+
+  // 5. Quote Text
+  ctx.fillStyle = theme.text
+  const textStr = String(quote.text || '')
+  const quoteLength = textStr.length
+  const fontSize = quoteLength > 300 ? 38 : quoteLength > 180 ? 44 : 50
+  ctx.font = `italic 600 ${fontSize}px Georgia, "Times New Roman", serif`
+  
+  const words = textStr.split(/\s+/)
   let line = ''
-  let y = 430
+  let lines = []
+  const maxTextWidth = 780
+
   words.forEach(word => {
     const test = line ? `${line} ${word}` : word
-    if (ctx.measureText(test).width > 830) {
-      ctx.fillText(line, 540, y)
+    if (ctx.measureText(test).width > maxTextWidth) {
+      lines.push(line)
       line = word
-      y += 70
     } else {
       line = test
     }
   })
-  if (line) ctx.fillText(line, 540, y)
-  ctx.font = '500 40px system-ui, sans-serif'
-  ctx.fillText(`— ${quote.author || 'AI'}`, 540, Math.min(y + 110, 1120))
+  if (line) lines.push(line)
+
+  // Center quotes text vertically in the card
+  const lineHeight = Math.round(fontSize * 1.5)
+  const totalTextHeight = lines.length * lineHeight
+  let y = 675 - (totalTextHeight / 2) + 20
+
+  lines.forEach(l => {
+    ctx.fillText(l, 540, y)
+    y += lineHeight
+  })
+
+  // 6. Draw Divider line
+  ctx.fillStyle = theme.accent
+  ctx.fillRect(440, Math.min(y + 30, 1090), 200, 4)
+
+  // 7. Author Name
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+  ctx.font = '700 38px system-ui, -apple-system, sans-serif'
+  ctx.fillText(`— ${quote.author || 'AI'}`, 540, Math.min(y + 90, 1150))
+
+  // 8. Footer Brand
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'
+  ctx.font = '800 28px system-ui, -apple-system, sans-serif'
+  ctx.fillText(APP_NAME, 540, 1205)
+
   canvas.toBlob(blob => {
     if (!blob) return
     const url = URL.createObjectURL(blob)
@@ -118,6 +227,17 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('inspire-favs') || '[]') } catch { return [] }
   })
   const [copied, setCopied] = useState(false)
+  const [toastText, setToastText] = useState('')
+  const triggerToast = useCallback((msg) => {
+    setToastText(msg)
+  }, [])
+  useEffect(() => {
+    if (toastText) {
+      const t = setTimeout(() => setToastText(''), 2200)
+      return () => clearTimeout(t)
+    }
+  }, [toastText])
+
   const [dark, setDark] = useState(() => {
     try { return JSON.parse(localStorage.getItem('inspire-dark') || 'false') } catch { return false }
   })
@@ -126,12 +246,14 @@ export default function App() {
   const [search, setSearch] = useState('')
   const [aiSettings, setAiSettings] = useState(loadAiSettings)
   const [savedAiQuotes, setSavedAiQuotes] = useState(loadSavedAiQuotes)
+  const [likedAiQuotes, setLikedAiQuotes] = useState(loadLikedAiQuotes)
   const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(true)
   const categoryTapRef = useRef({ key: '', time: 0 })
 
   const allFiltered = useMemo(() => {
+    const aiLikedList = likedAiQuotes.filter(q => favorites.includes(q.text))
     let list = tab === 'LIKED'
-      ? allQuotes.filter(q => favorites.includes(q.text))
+      ? [...allQuotes.filter(q => favorites.includes(q.text)), ...aiLikedList]
       : allQuotes.filter(q => q.category === tab)
     const q = search.trim().toLowerCase()
     if (q) {
@@ -141,7 +263,7 @@ export default function App() {
       )
     }
     return list
-  }, [tab, favorites, search])
+  }, [tab, favorites, likedAiQuotes, search])
 
   const safeIndex = allFiltered.length > 0 ? index % allFiltered.length : 0
   const quote = allFiltered.length > 0 ? allFiltered[safeIndex] : null
@@ -167,6 +289,7 @@ export default function App() {
   useEffect(() => { localStorage.setItem('inspire-view', viewMode) }, [viewMode])
   useEffect(() => { localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings)) }, [aiSettings])
   useEffect(() => { localStorage.setItem(AI_SAVED_KEY, JSON.stringify(savedAiQuotes)) }, [savedAiQuotes])
+  useEffect(() => { localStorage.setItem(AI_LIKED_KEY, JSON.stringify(likedAiQuotes)) }, [likedAiQuotes])
   useEffect(() => { document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light') }, [dark])
   useEffect(() => { if (page === 'archive') setPage('quotes') }, [page])
   useEffect(() => { setMenuOpen(false) }, [page, tab])
@@ -181,16 +304,41 @@ export default function App() {
 
   const setIndexWrap = useCallback((idx, cat) => {
     const c = cat || tab
-    const qs = c === 'LIKED' ? allQuotes.filter(q => favorites.includes(q.text)) : allQuotes.filter(q => q.category === c)
+    const qs = c === 'LIKED'
+      ? [...allQuotes.filter(q => favorites.includes(q.text)), ...likedAiQuotes.filter(q => favorites.includes(q.text))]
+      : allQuotes.filter(q => q.category === c)
     const wrapped = qs.length > 0 ? ((idx % qs.length) + qs.length) % qs.length : 0
     setIndex(wrapped)
     saveIndex(c, wrapped)
-  }, [tab, favorites])
+  }, [tab, favorites, likedAiQuotes])
 
   const toggleFav = useCallback(() => {
     if (!quote) return
+    const isNowFav = !favorites.includes(quote.text)
     dispatchFav({ type: 'TOGGLE', text: quote.text })
-  }, [quote])
+    triggerToast(isNowFav ? 'Added to Liked Quotes ❤️' : 'Removed from Liked Quotes 🤍')
+  }, [quote, favorites, triggerToast])
+
+  const toggleFavQuote = useCallback((q) => {
+    if (!q?.text) return
+    const isNowFav = !favorites.includes(q.text)
+    if (q.author === 'AI' || q.provider || q.category === 'AI') {
+      setLikedAiQuotes(prev => prev.some(item => item.text === q.text) ? prev : [{ ...q, author: q.author || 'AI', category: 'AI' }, ...prev])
+    }
+    dispatchFav({ type: 'TOGGLE', text: q.text })
+    triggerToast(isNowFav ? 'Added to Liked Quotes ❤️' : 'Removed from Liked Quotes 🤍')
+  }, [favorites, triggerToast])
+
+  const saveAnyQuote = useCallback((q) => {
+    if (!q?.text) return
+    const exists = savedAiQuotes.some(item => item.text === q.text)
+    if (exists) {
+      triggerToast('Already saved! 💾')
+      return
+    }
+    setSavedAiQuotes(prev => [{ ...q, author: q.author || 'Unknown', savedAt: new Date().toISOString() }, ...prev])
+    triggerToast('Quote saved successfully! 💾')
+  }, [savedAiQuotes, triggerToast])
 
   const removeFavInline = useCallback((text) => {
     dispatchFav({ type: 'REMOVE', text })
@@ -225,12 +373,12 @@ export default function App() {
 
   const copyQuote = useCallback(() => {
     if (!quote) return
-    navigator.clipboard.writeText(quote.text).then(() => setCopied(true)).catch(() => {})
-  }, [quote])
+    copyText(quote.text).then(ok => { if (ok) triggerToast('Quote copied to clipboard! 📋') })
+  }, [quote, triggerToast])
 
   const copyListQuote = useCallback((text) => {
-    navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => {})
-  }, [])
+    copyText(text).then(ok => { if (ok) triggerToast('Quote copied to clipboard! 📋') })
+  }, [triggerToast])
 
   const prevQuote = useCallback(() => {
     if (allFiltered.length > 0) setIndexWrap(safeIndex - 1)
@@ -300,6 +448,7 @@ export default function App() {
     { id: 'daily', label: 'Daily', emoji: '☀️' },
     { id: 'liked', label: 'Liked Quotes', emoji: '❤️' },
     { id: 'ai', label: 'AI Quotes', emoji: '🤖' },
+    { id: 'saved', label: 'Saved Quotes', emoji: '💾' },
     { id: 'about', label: 'About Us', emoji: 'ℹ️' },
     { id: 'contact', label: 'Contact', emoji: '📞' },
     { id: 'privacy', label: 'Privacy', emoji: '🔒' },
@@ -307,7 +456,7 @@ export default function App() {
     { id: 'disclaimer', label: 'Disclaimer', emoji: '⚠️' },
     { id: 'updates', label: 'Updates', emoji: '🔄' },
   ]
-  const bottomNavItems = ['quotes', 'daily', 'about', 'contact', 'updates']
+  const bottomNavItems = ['quotes', 'daily', 'ai', 'liked', 'saved']
     .map(id => navItems.find(item => item.id === id))
     .filter(Boolean)
 
@@ -471,10 +620,10 @@ export default function App() {
                           {isFav ? '❤️' : '🤍'}
                         </button>
                         <button className="action-btn" onClick={copyQuote} title="Copy quote only">📋</button>
+                        <button className="action-btn" onClick={() => saveAnyQuote(quote)} title="Save quote">💾</button>
                         <button className="action-btn" onClick={() => downloadQuoteImage(quote)} title="Download image">🖼️</button>
                       </div>
-                      {copied && <p className="copied-feedback" style={{ color: g1 }}>✅ Copied!</p>}
-                      {tab === 'LIKED' && favorites.length > 0 && (
+                       {tab === 'LIKED' && favorites.length > 0 && (
                         <button className="remove-inline-btn" onClick={() => removeFavInline(quote.text)}>🗑 Remove</button>
                       )}
                       <p className="quote-count">
@@ -504,6 +653,7 @@ export default function App() {
                                   {qIsFav ? '❤️' : '🤍'}
                                 </button>
                                 <button className="list-action-btn" onClick={() => copyListQuote(q.text)} title="Copy">📋</button>
+                                <button className="list-action-btn" onClick={() => saveAnyQuote(q)} title="Save">💾</button>
                                 <button className="list-action-btn" onClick={() => downloadQuoteImage(q)} title="Download image">🖼️</button>
                                 {tab === 'LIKED' && (
                                   <button className="list-remove-btn" onClick={() => removeFavInline(q.text)}>Remove</button>
@@ -515,7 +665,6 @@ export default function App() {
                           </div>
                         )
                       })}
-                      {copied && <p className="copied-feedback" style={{ color: g1, textAlign: 'center', marginTop: '8px' }}>✅ Copied!</p>}
                     </div>
                     <div className="nav-row">
                       <button className="nav-btn" onClick={prevListPage} disabled={listPage === 0} style={{ color: g1 }}>← Previous</button>
@@ -528,15 +677,24 @@ export default function App() {
             </div>
           </div>
         ) : page === 'daily' ? (
-          <DailyPage quotes={dailyQuotes} navTo={navTo} onFav={(text) => dispatchFav({ type: 'TOGGLE', text })} favorites={favorites} />
+          <DailyPage quotes={dailyQuotes} navTo={navTo} onFav={toggleFavQuote} onSave={saveAnyQuote} favorites={favorites} triggerToast={triggerToast} />
         ) : page === 'ai' ? (
           <AiQuotesPage
             settings={aiSettings}
             setSettings={setAiSettings}
             savedQuotes={savedAiQuotes}
             setSavedQuotes={setSavedAiQuotes}
-            onFav={(text) => dispatchFav({ type: 'TOGGLE', text })}
+            onFav={toggleFavQuote}
             favorites={favorites}
+            triggerToast={triggerToast}
+          />
+        ) : page === 'saved' ? (
+          <SavedQuotesPage
+            quotes={savedAiQuotes}
+            setQuotes={setSavedAiQuotes}
+            onFav={toggleFavQuote}
+            favorites={favorites}
+            triggerToast={triggerToast}
           />
         ) : page === 'updates' ? (
           <UpdatesPage />
@@ -556,14 +714,19 @@ export default function App() {
           ))}
         </nav>
       )}
+      {toastText && <div className="toast-container"><span>{toastText}</span></div>}
     </div>
   )
 }
 
-function DailyPage({ quotes, navTo, onFav, favorites }) {
+function DailyPage({ quotes, navTo, onFav, onSave, favorites, triggerToast }) {
   const lead = quotes[0]
   const [g1, g2] = gradients[lead.category] || ['#667EEA', '#764BA2']
-  const copy = (text) => navigator.clipboard.writeText(text).catch(() => {})
+  const copy = (text) => {
+    copyText(text).then(ok => {
+      if (ok) triggerToast('Quote copied to clipboard! 📋')
+    })
+  }
   return (
     <div className="static-page daily-page">
       <div className="static-card daily-card" style={{ background: `linear-gradient(145deg, ${g1}22, ${g2}22)` }}>
@@ -578,8 +741,9 @@ function DailyPage({ quotes, navTo, onFav, favorites }) {
                 <p className="daily-author">— {quote.author}</p>
                 <p className="daily-cat">{categories[quote.category]?.emoji} {categories[quote.category]?.label}</p>
                 <div className="daily-actions">
-                  <button className="cta-btn" onClick={() => onFav(quote.text)}>{isFav ? '❤️ Liked' : '🤍 Like'}</button>
+                  <button className="cta-btn" onClick={() => onFav(quote)}>{isFav ? '❤️ Liked' : '🤍 Like'}</button>
                   <button className="cta-btn cta-secondary" onClick={() => copy(quote.text)}>📋 Copy</button>
+                  <button className="cta-btn cta-secondary" onClick={() => onSave(quote)}>💾 Save</button>
                   <button className="cta-btn cta-secondary" onClick={() => downloadQuoteImage(quote)}>🖼️ Image</button>
                 </div>
               </article>
@@ -629,18 +793,18 @@ function cleanReleaseNotes(body = '') {
   ]
 }
 
-function parseAiQuotes(raw) {
+function parseAiQuotes(raw, max = 10) {
   const cleaned = String(raw || '').replace(/```json|```/g, '').trim()
   try {
     const parsed = JSON.parse(cleaned)
     const arr = Array.isArray(parsed) ? parsed : parsed.quotes
-    if (Array.isArray(arr)) return arr.map(item => typeof item === 'string' ? item : item.text).filter(Boolean).slice(0, 5)
+    if (Array.isArray(arr)) return arr.map(item => typeof item === 'string' ? item : item.text).filter(Boolean).slice(0, max)
   } catch {}
   return cleaned
     .split(/\n+/)
     .map(line => line.replace(/^\s*[-*\d.)"]+\s*/, '').replace(/"$/,'').trim())
     .filter(line => line.length > 8)
-    .slice(0, 5)
+    .slice(0, max)
 }
 
 async function callAiProvider(provider, config, prompt) {
@@ -649,7 +813,7 @@ async function callAiProvider(provider, config, prompt) {
   if (!key) throw new Error(`Please add ${AI_PROVIDERS[provider]?.label || provider} API key first.`)
 
   if (provider === 'gemini') {
-    const modelsToTry = [...new Set([model, 'gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash'])]
+    const modelsToTry = [...new Set([model, 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'])]
     let lastStatus = ''
     for (const geminiModel of modelsToTry) {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(key)}`, {
@@ -711,10 +875,11 @@ async function callAiProvider(provider, config, prompt) {
   throw new Error('Unknown AI provider')
 }
 
-function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFav, favorites }) {
+function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFav, favorites, triggerToast }) {
   const [provider, setProvider] = useState(settings.defaultProvider)
   const [language, setLanguage] = useState('Hindi')
   const [idea, setIdea] = useState('')
+  const [maxQuotes, setMaxQuotes] = useState(5)
   const [generated, setGenerated] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -747,9 +912,10 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
     setError('')
     try {
       const config = settings.providers[provider]
-      const prompt = `Generate exactly 5 original, short, powerful quotes in ${language}. Topic/idea: ${idea || 'motivation and life growth'}. Return only a JSON array of strings, no explanation.`
+      const seed = Math.random().toString(36).substring(7)
+      const prompt = `[Seed: ${seed}] Generate exactly ${maxQuotes} original, inspiring, detailed, and high-quality quotes in ${language}. Topic/idea/user requirements: ${idea || 'motivation and life growth'}. If the user asked for a specific length or size, follow it exactly. Make them detailed and substantial, not too short. Ensure they are unique and randomized. Return only a JSON array of strings, no explanation. Output format: ["quote 1", "quote 2", ...]`
       const raw = await callAiProvider(provider, config, prompt)
-      const quotes = parseAiQuotes(raw).map(text => ({ text, author: 'AI', provider }))
+      const quotes = parseAiQuotes(raw, maxQuotes).map(text => ({ text, author: 'AI', provider }))
       setGenerated(quotes)
     } catch (e) {
       setError(e.message || 'AI quote generation failed')
@@ -758,16 +924,27 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
     }
   }
 
-  const copy = (text) => navigator.clipboard.writeText(text).catch(() => {})
+  const copy = (text) => {
+    copyText(text).then(ok => {
+      if (ok) triggerToast('Quote copied to clipboard! 📋')
+    })
+  }
+
   const saveQuote = (quote) => {
-    setSavedQuotes(prev => prev.some(q => q.text === quote.text) ? prev : [{ ...quote, savedAt: new Date().toISOString() }, ...prev])
+    const exists = savedQuotes.some(q => q.text === quote.text)
+    if (exists) {
+      triggerToast('Already saved! 💾')
+      return
+    }
+    setSavedQuotes(prev => [{ ...quote, savedAt: new Date().toISOString() }, ...prev])
+    triggerToast('Quote saved successfully! 💾')
   }
 
   return (
     <div className="static-page">
       <div className="static-card static-wide ai-page">
         <h1>🤖 AI Quotes</h1>
-        <p>Choose your default AI, add API keys on this device, select a language, then generate top 5 quotes. Saved AI quotes stay inside this app.</p>
+        <p>Choose your default AI, add API keys on this device, select a language, then generate quotes. Saved AI quotes stay inside this app.</p>
 
         <section className="ai-section">
           <h2>AI API Settings</h2>
@@ -803,11 +980,14 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
                 {Object.entries(AI_PROVIDERS).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
               </select>
               <select value={language} onChange={e => setLanguage(e.target.value)}>
-                {['Hindi', 'English', 'Urdu', 'Hinglish', 'Arabic', 'Spanish', 'French'].map(lang => <option key={lang}>{lang}</option>)}
+                {AI_LANGUAGES.map(lang => <option key={lang} value={lang}>{lang}</option>)}
+              </select>
+              <select value={maxQuotes} onChange={e => setMaxQuotes(Number(e.target.value))}>
+                {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n} Quotes</option>)}
               </select>
             </div>
             <textarea value={idea} onChange={e => setIdea(e.target.value)} rows={4} placeholder="Write your idea, topic, mood, or audience..." />
-            <button className="cta-btn" disabled={busy} onClick={generate}>{busy ? 'Generating...' : 'Generate Top 5 Quotes'}</button>
+            <button className="cta-btn" disabled={busy} onClick={generate}>{busy ? 'Generating...' : `Generate Top ${maxQuotes} Quotes`}</button>
             {error && <p className="ai-error">{error}</p>}
           </div>
 
@@ -819,7 +999,7 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
                   <p>{quote.text}</p>
                   <small>— AI · {AI_PROVIDERS[quote.provider]?.label}</small>
                   <div className="ai-actions">
-                    <button onClick={() => onFav(quote.text)}>{liked ? '❤️ Liked' : '🤍 Like'}</button>
+                    <button onClick={() => onFav(quote)}>{liked ? '❤️ Liked' : '🤍 Like'}</button>
                     <button onClick={() => saveQuote(quote)}>Save</button>
                     <button onClick={() => copy(quote.text)}>Copy</button>
                     <button onClick={() => downloadQuoteImage(quote, 'AI Quote')}>Image</button>
@@ -829,23 +1009,54 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
             })}
           </div>
         </section>
+      </div>
+    </div>
+  )
+}
 
-        <section className="ai-section">
-          <h2>Saved AI Quotes</h2>
-          <div className="ai-results">
-            {savedQuotes.length === 0 ? <p>No AI quotes saved yet.</p> : savedQuotes.map((quote, i) => (
-              <article key={`${quote.text}-${i}`} className="ai-quote-card">
-                <p>{quote.text}</p>
-                <small>— AI</small>
-                <div className="ai-actions">
-                  <button onClick={() => copy(quote.text)}>Copy</button>
-                  <button onClick={() => downloadQuoteImage(quote, 'AI Quote')}>Image</button>
-                  <button onClick={() => setSavedQuotes(prev => prev.filter((_, idx) => idx !== i))}>Remove</button>
+function SavedQuotesPage({ quotes, setQuotes, onFav, favorites, triggerToast }) {
+  const copy = (text) => {
+    copyText(text).then(ok => {
+      if (ok) triggerToast('Quote copied to clipboard! 📋')
+    })
+  }
+
+  const removeQuote = (i) => {
+    setQuotes(prev => prev.filter((_, idx) => idx !== i))
+    triggerToast('Removed from Saved Quotes 🗑️')
+  }
+
+  return (
+    <div className="static-page">
+      <div className="static-card static-wide">
+        <h1>💾 Saved Quotes</h1>
+        <p>Your saved quotes are stored locally on this device.</p>
+        <div className="list-container list-wide">
+          {quotes.length === 0 ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '24px' }}>No saved quotes yet.</p>
+          ) : (
+            quotes.map((q, i) => {
+              const isFav = favorites.includes(q.text)
+              return (
+                <div key={i} className="list-card">
+                  <div className="list-card-top">
+                    <span className="list-num">{i + 1}</span>
+                    <div className="list-actions">
+                      <button className="list-action-btn" onClick={() => onFav(q)} title={isFav ? 'Unlike' : 'Like'}>
+                        {isFav ? '❤️' : '🤍'}
+                      </button>
+                      <button className="list-action-btn" onClick={() => copy(q.text)} title="Copy">📋</button>
+                      <button className="list-action-btn" onClick={() => removeQuote(i)} title="Remove">🗑️</button>
+                      <button className="list-action-btn" onClick={() => downloadQuoteImage(q, q.author || 'Saved')} title="Download image">🖼️</button>
+                    </div>
+                  </div>
+                  <p className="list-quote-text">{q.text}</p>
+                  <p className="list-quote-author">— {q.author || 'AI'}</p>
                 </div>
-              </article>
-            ))}
-          </div>
-        </section>
+              )
+            })
+          )}
+        </div>
       </div>
     </div>
   )
@@ -955,21 +1166,13 @@ function UpdatesPage() {
                 </ul>
                 <p className="muted-date">Published: {result.release.publishedAt ? new Date(result.release.publishedAt).toLocaleString() : '—'}</p>
 
-                {result.asset ? (
-                  <div className="download-box">
-                    <p>Recommended for <strong>{platformLabel(result.platform)}</strong>:</p>
-                    <button className="cta-btn" onClick={() => setPendingUpdate(result)}>
-                      ⬇️ Download v{result.latestVersion}
-                    </button>
-                    <p className="small-note">This opens the matching GitHub asset for your device, such as Android APK on Android and Windows installer on Windows.</p>
-                  </div>
-                ) : (
-                  <div className="download-box">
-                    <p>No direct installer matched this device automatically.</p>
-                    <a className="cta-btn" href={result.release.htmlUrl || RELEASES_PAGE} target="_blank" rel="noreferrer">Open release page</a>
-                  </div>
-                )}
-
+                <div className="download-box">
+                  <p>Open release details on GitHub for <strong>{platformLabel(result.platform)}</strong>:</p>
+                  <a className="cta-btn" href={result.release?.htmlUrl || RELEASES_PAGE} target="_blank" rel="noreferrer">
+                    🌐 Open GitHub Releases Page
+                  </a>
+                  <p className="small-note">This will open your browser and redirect you to the official releases page where you can view all assets for this version.</p>
+                </div>
               </>
             )}
 
@@ -984,33 +1187,12 @@ function UpdatesPage() {
           <li>You push code and run the multi-platform build pipeline.</li>
           <li>A GitHub Release is created with Windows / macOS / Linux / Android / iOS files.</li>
           <li>Users open <strong>Updates</strong> → <strong>Check for Updates</strong>.</li>
-          <li>The app shows the new <strong>version number</strong>, clean release notes, and one recommended update action for that device.</li>
-          <li>Android downloads inside the app and then opens the system install prompt. Other operating systems may still hand off the final install to their native installer.</li>
+          <li>The app shows the new <strong>version number</strong>, clean release notes, and redirects to the browser to get the installer for that device.</li>
+          <li>Install the downloaded build for your operating system.</li>
           <li>After installing the new build, reopen the app and the installed version shown here changes.</li>
         </ol>
         <a className="phone-link" href={RELEASES_PAGE} target="_blank" rel="noreferrer">Browse all releases →</a>
       </div>
-      {pendingUpdate?.asset && (
-        <div className="update-modal-backdrop" onClick={() => setPendingUpdate(null)}>
-          <div className="update-modal" onClick={e => e.stopPropagation()}>
-            <h2>Update to v{pendingUpdate.latestVersion}</h2>
-            <p>InspireApp selected the recommended GitHub download for <strong>{platformLabel(pendingUpdate.platform)}</strong>. Android gets the APK, Windows gets the installer, macOS gets the zip, and Linux gets the AppImage.</p>
-            <div className="update-modal-actions">
-              <button className="cta-btn cta-secondary" onClick={() => setPendingUpdate(null)}>Cancel</button>
-              <a
-                className="cta-btn"
-                href={pendingUpdate.asset.url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => {
-                  setUpdateNotice(`GitHub download opened for v${pendingUpdate.latestVersion}.`)
-                  setPendingUpdate(null)
-                }}
-              >Open GitHub Download v{pendingUpdate.latestVersion}</a>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -3411,3 +3411,51 @@ button,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Global Toast styling */
+.toast-container {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.9);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  pointer-events: none;
+  animation: toastFadeInOut 2.2s ease-in-out forwards;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes toastFadeInOut {
+  0% { opacity: 0; transform: translate(-50%, 15px); }
+  10% { opacity: 1; transform: translate(-50%, 0); }
+  90% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -10px); }
+}
+
+/* Smooth Scrolling & Click Transition Enhancements */
+html {
+  scroll-behavior: smooth;
+}
+
+button, .cta-btn, .nav-btn, .vt-btn, .tab, .action-btn, .list-action-btn {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+button:active, .cta-btn:active, .nav-btn:active, .action-btn:active, .list-action-btn:active {
+  transform: scale(0.95) !important;
+}
+
+/* Smooth scroll for desktop layouts */
+.main-content {
+  scroll-behavior: smooth !important;
+}
