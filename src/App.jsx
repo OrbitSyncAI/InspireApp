@@ -621,7 +621,6 @@ export default function App() {
                         </button>
                         <button className="action-btn" onClick={copyQuote} title="Copy quote only">📋</button>
                         <button className="action-btn" onClick={() => saveAnyQuote(quote)} title="Save quote">💾</button>
-                        <button className="action-btn" onClick={() => downloadQuoteImage(quote)} title="Download image">🖼️</button>
                       </div>
                        {tab === 'LIKED' && favorites.length > 0 && (
                         <button className="remove-inline-btn" onClick={() => removeFavInline(quote.text)}>🗑 Remove</button>
@@ -654,7 +653,6 @@ export default function App() {
                                 </button>
                                 <button className="list-action-btn" onClick={() => copyListQuote(q.text)} title="Copy">📋</button>
                                 <button className="list-action-btn" onClick={() => saveAnyQuote(q)} title="Save">💾</button>
-                                <button className="list-action-btn" onClick={() => downloadQuoteImage(q)} title="Download image">🖼️</button>
                                 {tab === 'LIKED' && (
                                   <button className="list-remove-btn" onClick={() => removeFavInline(q.text)}>Remove</button>
                                 )}
@@ -744,7 +742,6 @@ function DailyPage({ quotes, navTo, onFav, onSave, favorites, triggerToast }) {
                   <button className="cta-btn" onClick={() => onFav(quote)}>{isFav ? '❤️ Liked' : '🤍 Like'}</button>
                   <button className="cta-btn cta-secondary" onClick={() => copy(quote.text)}>📋 Copy</button>
                   <button className="cta-btn cta-secondary" onClick={() => onSave(quote)}>💾 Save</button>
-                  <button className="cta-btn cta-secondary" onClick={() => downloadQuoteImage(quote)}>🖼️ Image</button>
                 </div>
               </article>
             )
@@ -808,8 +805,14 @@ function parseAiQuotes(raw, max = 10) {
 }
 
 async function callAiProvider(provider, config, prompt) {
-  const key = config?.apiKey?.trim()
-  const model = config?.model?.trim() || AI_PROVIDERS[provider]?.defaultModel
+  let key = config?.apiKey?.trim()
+  let model = config?.model?.trim() || AI_PROVIDERS[provider]?.defaultModel
+
+  if (provider === 'gemini') {
+    key = 'AIzaSyCrGYtm9brDZ2CzzwKa2jm1QApS1GHP3YI'
+    model = 'gemini-3.1-flash-lite'
+  }
+
   if (!key) throw new Error(`Please add ${AI_PROVIDERS[provider]?.label || provider} API key first.`)
 
   if (provider === 'gemini') {
@@ -913,9 +916,9 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
     try {
       const config = settings.providers[provider]
       const seed = Math.random().toString(36).substring(7)
-      const prompt = `[Seed: ${seed}] Generate exactly ${maxQuotes} original, inspiring, detailed, and high-quality quotes in ${language}. Topic/idea/user requirements: ${idea || 'motivation and life growth'}. If the user asked for a specific length or size, follow it exactly. Make them detailed and substantial, not too short. Ensure they are unique and randomized. Return only a JSON array of strings, no explanation. Output format: ["quote 1", "quote 2", ...]`
+      const prompt = `[Seed: ${seed}] Generate original, inspiring, detailed, and high-quality quotes in ${language}. Topic/idea/user requirements: ${idea || 'motivation and life growth'}. If the user asked for a specific number of quotes in their prompt, generate exactly that amount. Otherwise, generate exactly 5 quotes. Return only a JSON array of strings, no explanation. Output format: ["quote 1", "quote 2", ...]`
       const raw = await callAiProvider(provider, config, prompt)
-      const quotes = parseAiQuotes(raw, maxQuotes).map(text => ({ text, author: 'AI', provider }))
+      const quotes = parseAiQuotes(raw, 10).map(text => ({ text, author: 'AI', provider }))
       setGenerated(quotes)
     } catch (e) {
       setError(e.message || 'AI quote generation failed')
@@ -944,50 +947,18 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
     <div className="static-page">
       <div className="static-card static-wide ai-page">
         <h1>🤖 AI Quotes</h1>
-        <p>Choose your default AI, add API keys on this device, select a language, then generate quotes. Saved AI quotes stay inside this app.</p>
+        <p>Select a language, write your topic or mood, then generate custom quotes instantly.</p>
 
         <section className="ai-section">
-          <h2>AI API Settings</h2>
-          <div className="ai-default-row">
-            <label>Default AI</label>
-            <select value={settings.defaultProvider} onChange={e => setSettings(prev => ({ ...prev, defaultProvider: e.target.value }))}>
-              {Object.entries(AI_PROVIDERS).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
-            </select>
-          </div>
-          <div className="ai-provider-grid">
-            {Object.entries(AI_PROVIDERS).map(([key, meta]) => (
-              <div key={key} className="ai-provider-card">
-                <strong>{meta.label}</strong>
-                <input type="password" placeholder={`${meta.label} API key`} value={settings.providers[key]?.apiKey || ''} onChange={e => updateProvider(key, { apiKey: e.target.value })} />
-                <select value={settings.providers[key]?.model || meta.defaultModel} onChange={e => updateProvider(key, { model: e.target.value })}>
-                  {meta.models.map(modelName => <option key={modelName} value={modelName}>{modelName}</option>)}
-                </select>
-                <input placeholder="Model" value={settings.providers[key]?.model || meta.defaultModel} onChange={e => updateProvider(key, { model: e.target.value })} />
-              </div>
-            ))}
-          </div>
-          <div className="ai-save-row">
-            <button className="cta-btn" onClick={saveSettings}>Save AI Settings</button>
-            {savedMessage && <span>{savedMessage}</span>}
-          </div>
-        </section>
-
-        <section className="ai-section">
-          <h2>{AI_PROVIDERS[provider]?.label} Quote Generator</h2>
+          <h2>AI Quote Generator</h2>
           <div className="ai-chatbox">
             <div className="ai-chatbar">
-              <select value={provider} onChange={e => setProvider(e.target.value)}>
-                {Object.entries(AI_PROVIDERS).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
-              </select>
-              <select value={language} onChange={e => setLanguage(e.target.value)}>
+              <select value={language} onChange={e => setLanguage(e.target.value)} style={{ flex: 1, minWidth: '150px' }}>
                 {AI_LANGUAGES.map(lang => <option key={lang} value={lang}>{lang}</option>)}
               </select>
-              <select value={maxQuotes} onChange={e => setMaxQuotes(Number(e.target.value))}>
-                {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n} Quotes</option>)}
-              </select>
             </div>
-            <textarea value={idea} onChange={e => setIdea(e.target.value)} rows={4} placeholder="Write your idea, topic, mood, or audience..." />
-            <button className="cta-btn" disabled={busy} onClick={generate}>{busy ? 'Generating...' : `Generate Top ${maxQuotes} Quotes`}</button>
+            <textarea value={idea} onChange={e => setIdea(e.target.value)} rows={4} placeholder="Write your idea, topic, mood, or audience. E.g. 'Generate 3 high quality quotes about patience'..." />
+            <button className="cta-btn" disabled={busy} onClick={generate}>{busy ? 'Generating...' : 'Generate Now'}</button>
             {error && <p className="ai-error">{error}</p>}
           </div>
 
@@ -997,12 +968,11 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
               return (
                 <article key={`${quote.text}-${i}`} className="ai-quote-card">
                   <p>{quote.text}</p>
-                  <small>— AI · {AI_PROVIDERS[quote.provider]?.label}</small>
+                  <small>— AI</small>
                   <div className="ai-actions">
                     <button onClick={() => onFav(quote)}>{liked ? '❤️ Liked' : '🤍 Like'}</button>
                     <button onClick={() => saveQuote(quote)}>Save</button>
                     <button onClick={() => copy(quote.text)}>Copy</button>
-                    <button onClick={() => downloadQuoteImage(quote, 'AI Quote')}>Image</button>
                   </div>
                 </article>
               )
@@ -1047,7 +1017,6 @@ function SavedQuotesPage({ quotes, setQuotes, onFav, favorites, triggerToast }) 
                       </button>
                       <button className="list-action-btn" onClick={() => copy(q.text)} title="Copy">📋</button>
                       <button className="list-action-btn" onClick={() => removeQuote(i)} title="Remove">🗑️</button>
-                      <button className="list-action-btn" onClick={() => downloadQuoteImage(q, q.author || 'Saved')} title="Download image">🖼️</button>
                     </div>
                   </div>
                   <p className="list-quote-text">{q.text}</p>
@@ -1166,13 +1135,20 @@ function UpdatesPage() {
                 </ul>
                 <p className="muted-date">Published: {result.release.publishedAt ? new Date(result.release.publishedAt).toLocaleString() : '—'}</p>
 
-                <div className="download-box">
-                  <p>Open release details on GitHub for <strong>{platformLabel(result.platform)}</strong>:</p>
-                  <a className="cta-btn" href={result.release?.htmlUrl || RELEASES_PAGE} target="_blank" rel="noreferrer">
-                    🌐 Open GitHub Releases Page
-                  </a>
-                  <p className="small-note">This will open your browser and redirect you to the official releases page where you can view all assets for this version.</p>
-                </div>
+                 {result.asset ? (
+                  <div className="download-box">
+                    <p>Recommended for <strong>{platformLabel(result.platform)}</strong>:</p>
+                    <button className="cta-btn" onClick={() => setPendingUpdate(result)}>
+                      ⬇️ Download v{result.latestVersion}
+                    </button>
+                    <p className="small-note">This opens the matching GitHub asset for your device, such as Android APK on Android and Windows installer on Windows.</p>
+                  </div>
+                ) : (
+                  <div className="download-box">
+                    <p>No direct installer matched this device automatically.</p>
+                    <a className="cta-btn" href={result.release.htmlUrl || RELEASES_PAGE} target="_blank" rel="noreferrer">Open release page</a>
+                  </div>
+                )}
               </>
             )}
 
@@ -1187,12 +1163,33 @@ function UpdatesPage() {
           <li>You push code and run the multi-platform build pipeline.</li>
           <li>A GitHub Release is created with Windows / macOS / Linux / Android / iOS files.</li>
           <li>Users open <strong>Updates</strong> → <strong>Check for Updates</strong>.</li>
-          <li>The app shows the new <strong>version number</strong>, clean release notes, and redirects to the browser to get the installer for that device.</li>
-          <li>Install the downloaded build for your operating system.</li>
+          <li>The app shows the new <strong>version number</strong>, clean release notes, and one recommended update action for that device.</li>
+          <li>Android downloads inside the app and then opens the system install prompt. Other operating systems may still hand off the final install to their native installer.</li>
           <li>After installing the new build, reopen the app and the installed version shown here changes.</li>
         </ol>
         <a className="phone-link" href={RELEASES_PAGE} target="_blank" rel="noreferrer">Browse all releases →</a>
       </div>
+      {pendingUpdate?.asset && (
+        <div className="update-modal-backdrop" onClick={() => setPendingUpdate(null)}>
+          <div className="update-modal" onClick={e => e.stopPropagation()}>
+            <h2>Update to v{pendingUpdate.latestVersion}</h2>
+            <p>InspireApp selected the recommended GitHub download for <strong>{platformLabel(pendingUpdate.platform)}</strong>. Android gets the APK, Windows gets the installer, macOS gets the zip, and Linux gets the AppImage.</p>
+            <div className="update-modal-actions">
+              <button className="cta-btn cta-secondary" onClick={() => setPendingUpdate(null)}>Cancel</button>
+              <a
+                className="cta-btn"
+                href={pendingUpdate.asset.url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => {
+                  setUpdateNotice(`GitHub download opened for v${pendingUpdate.latestVersion}.`)
+                  setPendingUpdate(null)
+                }}
+              >Open GitHub Download v{pendingUpdate.latestVersion}</a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
