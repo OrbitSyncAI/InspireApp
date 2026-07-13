@@ -1,8 +1,13 @@
 import { useState, useCallback, useEffect, useReducer, useMemo, useRef } from 'react'
 import { categories, gradients, allQuotes, currentYear } from './data'
 import { staticPages } from './pagesContent'
-import { APP_NAME, APP_VERSION, APP_BUILD, RELEASES_PAGE, detectPlatform, platformLabel, BACKEND_URL, BACKEND_TOKEN } from './version'
+import { APP_NAME, APP_VERSION, APP_BUILD, RELEASES_PAGE, detectPlatform, platformLabel, SUPABASE_URL, SUPABASE_ANON_KEY } from './version'
 import { checkForUpdates } from './updateService'
+import { createClient } from '@supabase/supabase-js'
+
+// Initialize Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
 
 const tabKeys = Object.keys(categories).filter(k => k !== 'LIKED')
 const PER_PAGE = 10
@@ -249,6 +254,20 @@ export default function App() {
   const [likedAiQuotes, setLikedAiQuotes] = useState(loadLikedAiQuotes)
   const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(true)
   const categoryTapRef = useRef({ key: '', time: 0 })
+  const [clickCount, setClickCount] = useState(0)
+
+  const handleVersionClick = () => {
+    setClickCount(c => {
+      if (c + 1 >= 5) {
+        setPage('admin')
+        setMenuOpen(false)
+        triggerToast('Welcome to Admin Portal! 🔐')
+        return 0
+      }
+      return c + 1
+    })
+  }
+
 
   const allFiltered = useMemo(() => {
     const aiLikedList = likedAiQuotes.filter(q => favorites.includes(q.text))
@@ -476,7 +495,7 @@ export default function App() {
             </button>
           ))}
         </div>
-        <div className="oc-version-bottom">
+        <div className="oc-version-bottom" onClick={handleVersionClick} style={{ cursor: 'pointer' }}>
           <span>{APP_NAME}</span>
           <strong>v{APP_VERSION}</strong>
         </div>
@@ -696,6 +715,8 @@ export default function App() {
           />
         ) : page === 'updates' ? (
           <UpdatesPage />
+        ) : page === 'admin' ? (
+          <AdminPanelPage navTo={navTo} triggerToast={triggerToast} />
         ) : (
           <StaticPage page={page} navTo={navTo} />
         )}
@@ -807,26 +828,21 @@ function parseAiQuotes(raw, max = 10) {
 async function callAiProvider(provider, config, prompt) {
   let model = config?.model?.trim() || AI_PROVIDERS[provider]?.defaultModel
 
-  console.log(`[Backend Proxy] Requesting AI generation via backend: ${BACKEND_URL}`);
-  const res = await fetch(`${BACKEND_URL}/api/generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${BACKEND_TOKEN}`
-    },
-    body: JSON.stringify({
-      provider,
-      model,
-      prompt
-    })
+  console.log(`[Supabase RPC] Invoking generate_ai_quote for provider: ${provider}`);
+  const { data, error } = await supabase.rpc('generate_ai_quote', {
+    provider,
+    model,
+    prompt
   });
 
-  if (!res.ok) {
-    const errorJson = await res.json().catch(() => ({}));
-    throw new Error(errorJson.error || `Server error: ${res.status}`);
+  if (error) {
+    throw new Error(error.message);
   }
 
-  const data = await res.json();
+  if (data && data.success === false) {
+    throw new Error(data.error || 'AI generation failed');
+  }
+
   return data.text;
 }
 
@@ -1183,3 +1199,582 @@ function StaticPage({ page, navTo }) {
     </div>
   )
 }
+
+function AdminPanelPage({ navTo, triggerToast }) {
+  const [session, setSession] = useState(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Forgot Password States
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1); // 1 = Email, 2 = OTP, 3 = Reset
+  const [emailInput, setEmailInput] = useState('');
+  const [otpInput, setOtpInput] = useState('');
+  const [newPassInput, setNewPassInput] = useState('');
+  const [forgotMessage, setForgotMessage] = useState('');
+  const [forgotError, setForgotError] = useState('');
+
+  // Dashboard Configuration States
+  const [activeTab, setActiveTab] = useState('gemini');
+  const [config, setConfig] = useState({
+    defaultProvider: 'gemini',
+    gemini: { defaultModel: 'gemini-3.1-flash-lite', activeKey: '', keys: [] },
+    openai: { defaultModel: 'gpt-4o-mini', activeKey: '', keys: [] },
+    openrouter: { defaultModel: 'openai/gpt-4o-mini', activeKey: '', keys: [] }
+  });
+  
+  // Custom Local Key management inputs
+  const [newFallbackKey, setNewFallbackKey] = useState('');
+
+  // Profile management states
+  const [newProfilePassword, setNewProfilePassword] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+
+  // Fetch current session on mount
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch current configuration
+  const fetchConfig = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('api_config')
+        .select('*')
+        .eq('id', 'config')
+        .single();
+      
+      if (error) throw error;
+      if (data) {
+        setConfig({
+          defaultProvider: data.default_provider || 'gemini',
+          gemini: data.gemini || { defaultModel: 'gemini-3.1-flash-lite', activeKey: '', keys: [] },
+          openai: data.openai || { defaultModel: 'gpt-4o-mini', activeKey: '', keys: [] },
+          openrouter: data.openrouter || { defaultModel: 'openai/gpt-4o-mini', activeKey: '', keys: [] }
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching config:', err.message);
+      triggerToast('Error fetching configurations from database. Make sure setup-supabase.sql was executed.');
+    }
+  }, [triggerToast]);
+
+  useEffect(() => {
+    if (session) {
+      fetchConfig();
+    }
+  }, [session, fetchConfig]);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!email || !password) return;
+    setBusy(true);
+    setLoginError('');
+    try {
+      // Map username 'Sohel' to recovery email automatically for convenience
+      const loginEmail = email.trim().toLowerCase() === 'sohel' ? 'larsonsteve48@gmail.com' : email.trim();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password
+      });
+      if (error) throw error;
+      triggerToast('Logged in as administrator! 🔑');
+    } catch (err) {
+      setLoginError(err.message || 'Login failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+    setEmail('');
+    setPassword('');
+    setForgotMode(false);
+    setForgotStep(1);
+    setForgotError('');
+    setForgotMessage('');
+    triggerToast('Logged out! 🔒');
+  };
+
+  // Forgot password flows
+  const triggerForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!emailInput) return;
+    setBusy(true);
+    setForgotError('');
+    setForgotMessage('');
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(emailInput.trim(), {
+        redirectTo: window.location.origin // Redirect to app
+      });
+      if (error) throw error;
+      setForgotMessage('Password reset link sent to your email. Check your inbox/spam folder.');
+      // Supabase resets password via email link or token. 
+      // If user uses OTP, we can verify with verifyOtp:
+      setForgotStep(2);
+    } catch (err) {
+      setForgotError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyOtp = async (e) => {
+    e.preventDefault();
+    if (!otpInput) return;
+    setBusy(true);
+    setForgotError('');
+    setForgotMessage('');
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: emailInput.trim(),
+        token: otpInput.trim(),
+        type: 'recovery'
+      });
+      if (error) throw error;
+      setForgotStep(3);
+    } catch (err) {
+      setForgotError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resetPassword = async (e) => {
+    e.preventDefault();
+    if (!newPassInput) return;
+    setBusy(true);
+    setForgotError('');
+    setForgotMessage('');
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassInput
+      });
+      if (error) throw error;
+      triggerToast('Password reset successfully! 🔑');
+      setForgotMode(false);
+      setForgotStep(1);
+      setEmailInput('');
+      setOtpInput('');
+      setNewPassInput('');
+    } catch (err) {
+      setForgotError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Keys Save Handler
+  const saveProviderKeys = async (provider) => {
+    setBusy(true);
+    try {
+      const providerData = config[provider];
+      const { error } = await supabase
+        .from('api_config')
+        .upsert({
+          id: 'config',
+          default_provider: config.defaultProvider,
+          [provider]: {
+            defaultModel: providerData.defaultModel,
+            activeKey: providerData.activeKey,
+            keys: providerData.keys
+          },
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      triggerToast(`${provider.toUpperCase()} keys saved to database! 💾`);
+      fetchConfig();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Default provider save
+  const saveDefaultProvider = async (provider) => {
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('api_config')
+        .upsert({
+          id: 'config',
+          default_provider: provider,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      setConfig(prev => ({ ...prev, defaultProvider: provider }));
+      triggerToast(`Default AI provider set to ${provider.toUpperCase()}! 🤖`);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Profile save handler
+  const saveProfile = async (e) => {
+    e.preventDefault();
+    if (!newProfilePassword && !newEmail) {
+      triggerToast('No fields changed.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const updates = {};
+      if (newEmail) updates.email = newEmail.trim();
+      if (newProfilePassword) updates.password = newProfilePassword;
+
+      const { error } = await supabase.auth.updateUser(updates);
+      if (error) throw error;
+
+      triggerToast('Profile updated successfully! 👤');
+      setNewProfilePassword('');
+      setNewEmail('');
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Fallback key management operations
+  const addFallbackKey = (provider) => {
+    if (!newFallbackKey) return;
+    setConfig(prev => {
+      const providerData = prev[provider] || { keys: [] };
+      const currentKeys = providerData.keys || [];
+      if (currentKeys.includes(newFallbackKey)) return prev;
+      return {
+        ...prev,
+        [provider]: {
+          ...providerData,
+          keys: [...currentKeys, newFallbackKey]
+        }
+      };
+    });
+    setNewFallbackKey('');
+  };
+
+  const removeFallbackKey = (provider, index) => {
+    setConfig(prev => {
+      const providerData = prev[provider];
+      return {
+        ...prev,
+        [provider]: {
+          ...providerData,
+          keys: providerData.keys.filter((_, idx) => idx !== index)
+        }
+      };
+    });
+  };
+
+  if (!session) {
+    return (
+      <div className="static-page">
+        <div className="static-card admin-auth-card">
+          <h1>🔐 Admin Portal</h1>
+          <p>Login to securely configure API keys, models, and security settings on your database.</p>
+
+          {!forgotMode ? (
+            <form onSubmit={handleLogin} className="admin-form">
+              <div className="form-group">
+                <label>Email or Username</label>
+                <input
+                  type="text"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="Enter email or Sohel"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Enter admin password"
+                  required
+                />
+              </div>
+              {loginError && <p className="form-error">{loginError}</p>}
+              <div className="form-actions">
+                <button type="submit" className="cta-btn" disabled={busy}>
+                  {busy ? 'Authenticating...' : 'Login Securely'}
+                </button>
+                <button
+                  type="button"
+                  className="cta-btn cta-secondary"
+                  onClick={() => {
+                    setForgotMode(true);
+                    setForgotError('');
+                    setForgotMessage('');
+                  }}
+                >
+                  Forgot Password?
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="admin-forgot-flow">
+              <h3>Reset Admin Password</h3>
+              {forgotError && <p className="form-error">{forgotError}</p>}
+              {forgotMessage && <p className="form-success">{forgotMessage}</p>}
+
+              {forgotStep === 1 && (
+                <form onSubmit={triggerForgotPassword} className="admin-form">
+                  <p className="step-note">Enter your email address (`larsonsteve48@gmail.com`) to receive a reset code.</p>
+                  <div className="form-group">
+                    <label>Recovery Email</label>
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={e => setEmailInput(e.target.value)}
+                      placeholder="e.g. name@domain.com"
+                      required
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button type="submit" className="cta-btn" disabled={busy}>
+                      {busy ? 'Sending...' : 'Request Reset Email'}
+                    </button>
+                    <button type="button" className="cta-btn cta-secondary" onClick={() => setForgotMode(false)}>
+                      Back to Login
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {forgotStep === 2 && (
+                <form onSubmit={verifyOtp} className="admin-form">
+                  <p className="step-note">Enter the 6-digit verification code sent to your email to verify reset access.</p>
+                  <div className="form-group">
+                    <label>Enter Email OTP Code</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={otpInput}
+                      onChange={e => setOtpInput(e.target.value)}
+                      placeholder="Enter OTP code"
+                      required
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button type="submit" className="cta-btn" disabled={busy}>
+                      {busy ? 'Verifying...' : 'Verify OTP'}
+                    </button>
+                    <button type="button" className="cta-btn cta-secondary" onClick={() => setForgotStep(1)}>
+                      Back
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {forgotStep === 3 && (
+                <form onSubmit={resetPassword} className="admin-form">
+                  <div className="form-group">
+                    <label>New Password</label>
+                    <input
+                      type="password"
+                      value={newPassInput}
+                      onChange={e => setNewPassInput(e.target.value)}
+                      placeholder="Enter your new password"
+                      required
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button type="submit" className="cta-btn" disabled={busy}>
+                      {busy ? 'Saving...' : 'Reset Password'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          <button className="cta-btn cta-secondary" style={{ marginTop: '20px', width: '100%' }} onClick={() => navTo('quotes')}>
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="static-page">
+      <div className="static-card static-wide admin-dashboard">
+        <div className="dashboard-header">
+          <h1>🔐 Admin Dashboard</h1>
+          <button className="cta-btn cta-secondary logout-btn" onClick={handleLogout}>
+            Logout 🔒
+          </button>
+        </div>
+        <p className="dashboard-note">Securely managing Supabase project database.</p>
+
+        <div className="dashboard-layout">
+          {/* Left Side: Keys Configuration */}
+          <div className="dashboard-column">
+            <div className="dash-card">
+              <h2>🔑 API Key Manager</h2>
+              
+              <div className="form-group">
+                <label>Default AI Provider</label>
+                <select
+                  value={config.defaultProvider}
+                  onChange={e => saveDefaultProvider(e.target.value)}
+                >
+                  <option value="gemini">Gemini (Google)</option>
+                  <option value="openai">OpenAI (ChatGPT)</option>
+                  <option value="openrouter">OpenRouter</option>
+                </select>
+              </div>
+
+              <div className="provider-tabs">
+                {['gemini', 'openai', 'openrouter'].map(p => (
+                  <button
+                    key={p}
+                    className={`tab-btn ${activeTab === p ? 'active' : ''}`}
+                    onClick={() => { setActiveTab(p); setNewFallbackKey(''); }}
+                  >
+                    {p.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
+              {['gemini', 'openai', 'openrouter'].map(p => {
+                if (activeTab !== p) return null;
+                const pData = config[p] || { defaultModel: '', activeKey: '', keys: [] };
+
+                return (
+                  <div key={p} className="tab-content">
+                    <div className="form-group">
+                      <label>Default Model</label>
+                      <input
+                        type="text"
+                        value={pData.defaultModel || ''}
+                        onChange={e => setConfig(prev => ({
+                          ...prev,
+                          [p]: { ...prev[p], defaultModel: e.target.value }
+                        }))}
+                        placeholder="e.g. gemini-3.1-flash-lite"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Active / Primary Key</label>
+                      <input
+                        type="password"
+                        value={pData.activeKey || ''}
+                        onChange={e => setConfig(prev => ({
+                          ...prev,
+                          [p]: { ...prev[p], activeKey: e.target.value }
+                        }))}
+                        placeholder="Enter primary API key"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label>Fallback Keys List</label>
+                      <div className="fallback-list">
+                        {(pData.keys || []).map((k, idx) => (
+                          <div key={idx} className="fallback-item">
+                            <span className="key-mask">
+                              {k.length > 15 ? `${k.substring(0, 6)}...${k.substring(k.length - 4)}` : k}
+                            </span>
+                            <button
+                              type="button"
+                              className="remove-key-btn"
+                              onClick={() => removeFallbackKey(p, idx)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <div className="add-key-row">
+                        <input
+                          type="password"
+                          value={newFallbackKey}
+                          onChange={e => setNewFallbackKey(e.target.value)}
+                          placeholder="Add fallback API key"
+                        />
+                        <button
+                          type="button"
+                          className="cta-btn"
+                          onClick={() => addFallbackKey(p)}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="cta-btn save-keys-btn"
+                      onClick={() => saveProviderKeys(p)}
+                      disabled={busy}
+                    >
+                      Save {p.toUpperCase()} Config
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right Side: Profile Credentials */}
+          <div className="dashboard-column">
+            <div className="dash-card">
+              <h2>👤 Profile & Security</h2>
+              <form onSubmit={saveProfile} className="admin-form">
+                <p className="step-note">Change your recovery email or account password. Leave fields blank to keep them unchanged.</p>
+
+                <div className="form-group">
+                  <label>Change Recovery Email</label>
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={e => setNewEmail(e.target.value)}
+                    placeholder="Enter new recovery email"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Change Password</label>
+                  <input
+                    type="password"
+                    value={newProfilePassword}
+                    onChange={e => setNewProfilePassword(e.target.value)}
+                    placeholder="Enter new password"
+                  />
+                </div>
+
+                <button type="submit" className="cta-btn" disabled={busy}>
+                  Update Profile Credentials
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+

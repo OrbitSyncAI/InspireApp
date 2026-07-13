@@ -5,4 +5,6 @@ dist-builds
 preview-server.cjs
 server/keys.json
 server/node_modules
+server/admin.json
 .env
+
