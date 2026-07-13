@@ -4,6 +4,8 @@ const { Client } = require('pg');
 require('dotenv').config();
 
 const SQL_FILE = path.join(__dirname, 'setup-supabase.sql');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 
 async function run() {
   const connectionString = process.env.DATABASE_URL;

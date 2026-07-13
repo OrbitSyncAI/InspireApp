@@ -8,7 +8,7 @@ export const GITHUB_REPO_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO
 export const RELEASES_API = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`
 export const LATEST_RELEASE_API = `${RELEASES_API}/latest`
 export const RELEASES_PAGE = `${GITHUB_REPO_URL}/releases`
-export const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL || 'https://ioghhfomesmpslubvmvq.supabase.co'
+export const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL || 'https://ioghhfomesmpslubvmvu.supabase.co'
 export const SUPABASE_ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY || 'sb_publishable_ffsX161EXZnTiSSotQWdEw_xlemyubc'
 
 /** Parse semver like 1.2.3 or v1.2.3 → [1,2,3] */
