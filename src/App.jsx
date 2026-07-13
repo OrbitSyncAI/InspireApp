@@ -475,6 +475,7 @@ export default function App() {
     { id: 'terms', label: 'Terms', emoji: '📜' },
     { id: 'disclaimer', label: 'Disclaimer', emoji: '⚠️' },
     { id: 'updates', label: 'Updates', emoji: '🔄' },
+    { id: 'admin', label: 'Admin Panel', emoji: '🔐' },
   ]
   const bottomNavItems = ['quotes', 'daily', 'ai', 'liked', 'saved']
     .map(id => navItems.find(item => item.id === id))
@@ -1220,6 +1221,12 @@ function AdminPanelPage({ navTo, triggerToast }) {
   const [forgotMessage, setForgotMessage] = useState('');
   const [forgotError, setForgotError] = useState('');
 
+  // Diagnostic Logs Terminal State
+  const [diagnosticLogs, setDiagnosticLogs] = useState([
+    `[${new Date().toLocaleTimeString()}] System ready. Press "Run Diagnostic" to test key connectivity.`
+  ]);
+  const [latency, setLatency] = useState(null);
+
   // Dashboard Configuration States
   const [activeTab, setActiveTab] = useState('gemini');
   const [config, setConfig] = useState({
@@ -1308,6 +1315,44 @@ function AdminPanelPage({ navTo, triggerToast }) {
       fetchProfile();
     }
   }, [session, fetchConfig, fetchProfile]);
+
+  const addLog = (msg) => {
+    setDiagnosticLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  };
+
+  // Run AI Key Diagnostic test
+  const runKeyDiagnostic = async (provider) => {
+    addLog(`Initiating connection diagnostic for: ${provider.toUpperCase()}...`);
+    const startTime = Date.now();
+    try {
+      const { data, error } = await supabase.rpc('generate_ai_quote', {
+        provider,
+        model: '',
+        prompt: 'SUCCESS'
+      });
+
+      const endTime = Date.now();
+      const duration = ((endTime - startTime) / 1000).toFixed(2);
+      setLatency(duration);
+
+      if (error) throw error;
+
+      if (data && data.success === true) {
+        addLog(`✅ DIAGNOSTIC PASS: Connection successful!`);
+        addLog(`⏱️ Database Latency: ${duration} seconds.`);
+        addLog(`💬 Response text: "${data.text.trim()}"`);
+        triggerToast('Key Diagnostic Passed! ✅');
+      } else {
+        throw new Error(data.error || 'Unknown error response from database');
+      }
+    } catch (err) {
+      const endTime = Date.now();
+      const duration = ((endTime - startTime) / 1000).toFixed(2);
+      addLog(`❌ DIAGNOSTIC FAIL: ${err.message || err}`);
+      addLog(`⏱️ Time elapsed: ${duration} seconds.`);
+      triggerToast('Key Diagnostic Failed! ❌');
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -1697,7 +1742,34 @@ function AdminPanelPage({ navTo, triggerToast }) {
             Logout 🔒
           </button>
         </div>
-        <p className="dashboard-note">Securely managing Supabase project database.</p>
+        
+        {/* Diagnostic latency widget */}
+        <div className="diagnostic-summary-grid">
+          <div className="stat-summary-card">
+            <span className="stat-label">Database Sync</span>
+            <span className="stat-value text-green">ONLINE ✅</span>
+          </div>
+          <div className="stat-summary-card">
+            <span className="stat-label">AI Diagnostic Test</span>
+            <button className="run-diag-btn" onClick={() => runKeyDiagnostic(activeTab)}>
+              ⚡ Run Diagnostic
+            </button>
+          </div>
+          <div className="stat-summary-card">
+            <span className="stat-label">Key Status Latency</span>
+            <span className="stat-value">{latency ? `${latency}s` : '--'}</span>
+          </div>
+        </div>
+
+        {/* Diagnostic Logs Terminal Screen */}
+        <div className="diagnostic-console">
+          <h3>⚡ Connection Diagnostic Console</h3>
+          <div className="console-terminal">
+            {diagnosticLogs.map((log, idx) => (
+              <div key={idx} className="terminal-line">{log}</div>
+            ))}
+          </div>
+        </div>
 
         <div className="dashboard-layout">
           {/* Left Side: Keys Configuration */}
