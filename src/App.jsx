@@ -474,8 +474,8 @@ export default function App() {
     { id: 'privacy', label: 'Privacy', emoji: '🔒' },
     { id: 'terms', label: 'Terms', emoji: '📜' },
     { id: 'disclaimer', label: 'Disclaimer', emoji: '⚠️' },
-    { id: 'updates', label: 'Updates', emoji: '🔄' },
     { id: 'admin', label: 'Admin Panel', emoji: '🔐' },
+    { id: 'updates', label: 'Updates', emoji: '🔄' },
   ]
   const bottomNavItems = ['quotes', 'daily', 'ai', 'liked', 'saved']
     .map(id => navItems.find(item => item.id === id))
@@ -699,8 +699,6 @@ export default function App() {
           <DailyPage quotes={dailyQuotes} navTo={navTo} onFav={toggleFavQuote} onSave={saveAnyQuote} favorites={favorites} triggerToast={triggerToast} />
         ) : page === 'ai' ? (
           <AiQuotesPage
-            settings={aiSettings}
-            setSettings={setAiSettings}
             savedQuotes={savedAiQuotes}
             setSavedQuotes={setSavedAiQuotes}
             onFav={toggleFavQuote}
@@ -827,14 +825,12 @@ function parseAiQuotes(raw, max = 10) {
     .slice(0, max)
 }
 
-async function callAiProvider(provider, config, prompt) {
-  let model = config?.model?.trim() || AI_PROVIDERS[provider]?.defaultModel
-
-  console.log(`[Supabase RPC] Invoking generate_ai_quote for provider: ${provider}`);
-  const { data, error } = await supabase.rpc('generate_ai_quote', {
-    provider,
-    model,
-    prompt
+async function callAiResponse(prompt, mimeType = '', base64Data = '') {
+  console.log(`[Supabase RPC] Invoking generate_ai_response`);
+  const { data, error } = await supabase.rpc('generate_ai_response', {
+    prompt,
+    mime_type: mimeType,
+    base64_data: base64Data
   });
 
   if (error) {
@@ -848,50 +844,67 @@ async function callAiProvider(provider, config, prompt) {
   return data.text;
 }
 
-function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFav, favorites, triggerToast }) {
-  const [provider, setProvider] = useState(settings.defaultProvider)
-  const [language, setLanguage] = useState('Hindi')
-  const [idea, setIdea] = useState('')
-  const [maxQuotes, setMaxQuotes] = useState(5)
-  const [generated, setGenerated] = useState([])
+function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerToast }) {
+  const [prompt, setPrompt] = useState('')
+  const [attachedFile, setAttachedFile] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [savedMessage, setSavedMessage] = useState('')
+  const [resultType, setResultType] = useState('quotes') // 'quotes' | 'text'
+  const [textResult, setTextResult] = useState('')
+  const [quotesResult, setQuotesResult] = useState([])
 
-  useEffect(() => { setProvider(settings.defaultProvider) }, [settings.defaultProvider])
-
-  const updateProvider = (key, patch) => {
-    setSettings(prev => ({
-      ...prev,
-      providers: {
-        ...prev.providers,
-        [key]: { ...prev.providers[key], ...patch },
-      },
-    }))
-  }
-
-  const saveSettings = () => {
-    try {
-      localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(settings))
-      setSavedMessage('AI settings saved on this device.')
-      setTimeout(() => setSavedMessage(''), 1800)
-    } catch {
-      setSavedMessage('Could not save AI settings on this device.')
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+      setAttachedFile(null);
+      return;
     }
-  }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAttachedFile({
+        name: file.name,
+        type: file.type,
+        base64: reader.result.split(',')[1],
+        previewUrl: file.type.startsWith('image/') ? reader.result : null
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearAttachedFile = () => {
+    setAttachedFile(null);
+  };
 
   const generate = async () => {
     setBusy(true)
     setError('')
+    setTextResult('')
+    setQuotesResult([])
+
     try {
-      const config = settings.providers[provider]
-      const seed = Math.random().toString(36).substring(7)
-      const prompt = `[Seed: ${seed}] Generate original, inspiring, detailed, and high-quality quotes in ${language}. Topic/idea/user requirements: ${idea || 'motivation and life growth'}. If the user asked for a specific number of quotes in their prompt, generate exactly that amount. Otherwise, generate exactly 5 quotes. Return only a JSON array of strings, no explanation. Output format: ["quote 1", "quote 2", ...]`
-      const raw = await callAiProvider(provider, config, prompt)
-      const quotes = parseAiQuotes(raw, 10).map(text => ({ text, author: 'AI', provider }))
-      setGenerated(quotes)
+      const isPromptEmpty = prompt.trim() === '';
+      const responseText = await callAiResponse(
+        prompt, 
+        attachedFile?.type || '', 
+        attachedFile?.base64 || ''
+      );
+
+      if (isPromptEmpty) {
+        // Fallback mode: parse 5 motivational quotes from text
+        setResultType('quotes');
+        const parsed = parseAiQuotes(responseText, 5).map(text => ({
+          text,
+          author: 'Gemini AI',
+          category: 'MOTIVATION'
+        }));
+        setQuotesResult(parsed);
+      } else {
+        // Full AI response mode
+        setResultType('text');
+        setTextResult(responseText);
+      }
     } catch (e) {
-      setError(e.message || 'AI quote generation failed')
+      setError(e.message || 'AI generation failed');
     } finally {
       setBusy(false)
     }
@@ -899,56 +912,124 @@ function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFa
 
   const copy = (text) => {
     copyText(text).then(ok => {
-      if (ok) triggerToast('Quote copied to clipboard! 📋')
+      if (ok) triggerToast('Copied to clipboard! 📋')
     })
   }
 
-  const saveQuote = (quote) => {
-    const exists = savedQuotes.some(q => q.text === quote.text)
+  const saveItem = (text, author = 'Gemini AI') => {
+    const exists = savedQuotes.some(q => q.text === text)
     if (exists) {
       triggerToast('Already saved! 💾')
       return
     }
-    setSavedQuotes(prev => [{ ...quote, savedAt: new Date().toISOString() }, ...prev])
-    triggerToast('Quote saved successfully! 💾')
+    setSavedQuotes(prev => [{ text, author, savedAt: new Date().toISOString() }, ...prev])
+    triggerToast('Saved successfully! 💾')
   }
 
   return (
     <div className="static-page">
-      <div className="static-card static-wide ai-page">
-        <h1>🤖 AI Quotes</h1>
-        <p>Select a language, write your topic or mood, then generate custom quotes instantly.</p>
+      <div className="static-card static-wide ai-page" style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <h1>🤖 Gemini AI Assistant</h1>
+        <p>Ask anything, attach files (images, documents, PDFs, videos, music), or leave empty to generate motivational quotes.</p>
 
-        <section className="ai-section">
-          <h2>AI Quote Generator</h2>
-          <div className="ai-chatbox">
-            <div className="ai-chatbar">
-              <select value={language} onChange={e => setLanguage(e.target.value)} style={{ flex: 1, minWidth: '150px' }}>
-                {AI_LANGUAGES.map(lang => <option key={lang} value={lang}>{lang}</option>)}
-              </select>
+        <section className="ai-section" style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '14px', border: '1px solid var(--static-border)' }}>
+          <div className="form-group" style={{ marginBottom: '14px' }}>
+            <label>Ask Gemini Prompt</label>
+            <textarea
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              rows={4}
+              placeholder="What would you like to ask or generate? E.g., 'Explain Quantum Computing' or leave empty for motivational quotes..."
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.15)', border: '1px solid var(--static-border)', color: 'var(--text-primary)' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <label className="cta-btn cta-secondary" style={{ cursor: 'pointer', margin: 0, padding: '8px 16px', fontSize: '0.88rem' }}>
+                📎 Attach File
+                <input
+                  type="file"
+                  onChange={handleFileChange}
+                  style={{ display: 'none' }}
+                  accept="image/*,application/pdf,text/*,audio/*,video/*"
+                />
+              </label>
+
+              {attachedFile && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--static-border)' }}>
+                  <span style={{ fontSize: '0.85rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {attachedFile.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearAttachedFile}
+                    style={{ background: 'none', border: 'none', color: '#E53E3E', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
             </div>
-            <textarea value={idea} onChange={e => setIdea(e.target.value)} rows={4} placeholder="Write your idea, topic, mood, or audience. E.g. 'Generate 3 high quality quotes about patience'..." />
-            <button className="cta-btn" disabled={busy} onClick={generate}>{busy ? 'Generating...' : 'Generate Now'}</button>
-            {error && <p className="ai-error">{error}</p>}
+
+            {attachedFile?.previewUrl && (
+              <div style={{ marginTop: '10px' }}>
+                <img
+                  src={attachedFile.previewUrl}
+                  alt="Attachment Preview"
+                  style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', border: '1px solid var(--static-border)' }}
+                />
+              </div>
+            )}
           </div>
 
-          <div className="ai-results">
-            {generated.map((quote, i) => {
-              const liked = favorites.includes(quote.text)
-              return (
-                <article key={`${quote.text}-${i}`} className="ai-quote-card">
-                  <p>{quote.text}</p>
-                  <small>— AI</small>
-                  <div className="ai-actions">
-                    <button onClick={() => onFav(quote)}>{liked ? '❤️ Liked' : '🤍 Like'}</button>
-                    <button onClick={() => saveQuote(quote)}>Save</button>
-                    <button onClick={() => copy(quote.text)}>Copy</button>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
+          <button
+            className="cta-btn"
+            disabled={busy}
+            onClick={generate}
+            style={{ width: '100%', padding: '12px' }}
+          >
+            {busy ? 'Generating...' : 'Ask Gemini Assistant Now'}
+          </button>
+
+          {error && <p className="ai-error" style={{ color: '#E53E3E', marginTop: '12px', fontSize: '0.9rem' }}>{error}</p>}
         </section>
+
+        {/* Results Container */}
+        {(textResult || quotesResult.length > 0) && (
+          <section className="ai-results-section" style={{ marginTop: '24px', textAlign: 'left' }}>
+            <h2 style={{ fontSize: '1.15rem', marginBottom: '14px' }}>✨ Gemini Response</h2>
+
+            {resultType === 'text' ? (
+              <div className="text-response-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '20px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
+                <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: '0.95rem', margin: '0 0 16px 0', lineHeight: '1.6' }}>
+                  {textResult}
+                </pre>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button className="cta-btn cta-secondary" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => copy(textResult)}>📋 Copy Response</button>
+                  <button className="cta-btn" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => saveItem(textResult, 'Gemini AI')}>💾 Save Response</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {quotesResult.map((quote, i) => {
+                  const liked = favorites.includes(quote.text)
+                  return (
+                    <article key={i} className="ai-quote-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
+                      <p style={{ fontSize: '1rem', margin: '0 0 12px 0' }}>{quote.text}</p>
+                      <small style={{ color: 'var(--text-secondary)' }}>— Gemini AI</small>
+                      <div className="ai-actions" style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+                        <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => onFav(quote)}>{liked ? '❤️ Liked' : '🤍 Like'}</button>
+                        <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => saveItem(quote.text)}>Save</button>
+                        <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => copy(quote.text)}>Copy</button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        )}
       </div>
     </div>
   )
@@ -1217,17 +1298,28 @@ function AdminPanelPage({ navTo, triggerToast }) {
   ]);
   const [latency, setLatency] = useState(null);
 
-  // Dashboard Configuration States
-  const [activeTab, setActiveTab] = useState('gemini');
+  // 5-Slot Gemini Configurations
   const [config, setConfig] = useState({
-    defaultProvider: 'gemini',
-    gemini: { defaultModel: 'gemini-3.1-flash-lite', activeKey: '', keys: [] },
-    openai: { defaultModel: 'gpt-4o-mini', activeKey: '', keys: [] },
-    openrouter: { defaultModel: 'openai/gpt-4o-mini', activeKey: '', keys: [] }
+    gemini_api_1_key: '',
+    gemini_api_1_model: 'gemini-1.5-flash',
+    gemini_api_2_key: '',
+    gemini_api_2_model: 'gemini-1.5-flash',
+    gemini_api_3_key: '',
+    gemini_api_3_model: 'gemini-1.5-flash',
+    gemini_api_4_key: '',
+    gemini_api_4_model: 'gemini-1.5-flash',
+    gemini_api_5_key: '',
+    gemini_api_5_model: 'gemini-1.5-flash'
   });
-  
-  // Custom Local Key management inputs
-  const [newFallbackKey, setNewFallbackKey] = useState('');
+
+  // Hide/Unhide toggles state for each slot
+  const [showKeys, setShowKeys] = useState({
+    1: false,
+    2: false,
+    3: false,
+    4: false,
+    5: false
+  });
 
   // Fetch configuration
   const fetchConfig = useCallback(async () => {
@@ -1241,10 +1333,16 @@ function AdminPanelPage({ navTo, triggerToast }) {
       if (error) throw error;
       if (data) {
         setConfig({
-          defaultProvider: data.default_provider || 'gemini',
-          gemini: data.gemini || { defaultModel: 'gemini-3.1-flash-lite', activeKey: '', keys: [] },
-          openai: data.openai || { defaultModel: 'gpt-4o-mini', activeKey: '', keys: [] },
-          openrouter: data.openrouter || { defaultModel: 'openai/gpt-4o-mini', activeKey: '', keys: [] }
+          gemini_api_1_key: data.gemini_api_1_key || '',
+          gemini_api_1_model: data.gemini_api_1_model || 'gemini-1.5-flash',
+          gemini_api_2_key: data.gemini_api_2_key || '',
+          gemini_api_2_model: data.gemini_api_2_model || 'gemini-1.5-flash',
+          gemini_api_3_key: data.gemini_api_3_key || '',
+          gemini_api_3_model: data.gemini_api_3_model || 'gemini-1.5-flash',
+          gemini_api_4_key: data.gemini_api_4_key || '',
+          gemini_api_4_model: data.gemini_api_4_model || 'gemini-1.5-flash',
+          gemini_api_5_key: data.gemini_api_5_key || '',
+          gemini_api_5_model: data.gemini_api_5_model || 'gemini-1.5-flash'
         });
       }
     } catch (err) {
@@ -1264,13 +1362,11 @@ function AdminPanelPage({ navTo, triggerToast }) {
   };
 
   // Run AI Key Diagnostic test
-  const runKeyDiagnostic = async (provider) => {
-    addLog(`Initiating connection diagnostic for: ${provider.toUpperCase()}...`);
+  const runKeyDiagnostic = async () => {
+    addLog(`Initiating connection diagnostic for Gemini config slots...`);
     const startTime = Date.now();
     try {
-      const { data, error } = await supabase.rpc('generate_ai_quote', {
-        provider,
-        model: '',
+      const { data, error } = await supabase.rpc('generate_ai_response', {
         prompt: 'SUCCESS'
       });
 
@@ -1281,7 +1377,7 @@ function AdminPanelPage({ navTo, triggerToast }) {
       if (error) throw error;
 
       if (data && data.success === true) {
-        addLog(`✅ DIAGNOSTIC PASS: Connection successful!`);
+        addLog(`✅ DIAGNOSTIC PASS: Active slot responded successfully!`);
         addLog(`⏱️ Database Latency: ${duration} seconds.`);
         addLog(`💬 Response text: "${data.text.trim()}"`);
         triggerToast('Key Diagnostic Passed! ✅');
@@ -1340,26 +1436,29 @@ function AdminPanelPage({ navTo, triggerToast }) {
     triggerToast('Logged out! 🔒');
   };
 
-  // Keys Save Handler
-  const saveProviderKeys = async (provider) => {
+  // Keys Save Handler (Upserts full state to prevent loading overwrite issues)
+  const saveKeySlot = async (slotIndex) => {
     setBusy(true);
     try {
-      const providerData = config[provider];
       const { error } = await supabase
         .from('api_config')
         .upsert({
           id: 'config',
-          default_provider: config.defaultProvider,
-          [provider]: {
-            defaultModel: providerData.defaultModel,
-            activeKey: providerData.activeKey,
-            keys: providerData.keys
-          },
+          gemini_api_1_key: config.gemini_api_1_key,
+          gemini_api_1_model: config.gemini_api_1_model,
+          gemini_api_2_key: config.gemini_api_2_key,
+          gemini_api_2_model: config.gemini_api_2_model,
+          gemini_api_3_key: config.gemini_api_3_key,
+          gemini_api_3_model: config.gemini_api_3_model,
+          gemini_api_4_key: config.gemini_api_4_key,
+          gemini_api_4_model: config.gemini_api_4_model,
+          gemini_api_5_key: config.gemini_api_5_key,
+          gemini_api_5_model: config.gemini_api_5_model,
           updated_at: new Date().toISOString()
         });
 
       if (error) throw error;
-      triggerToast(`${provider.toUpperCase()} keys saved to database! 💾`);
+      triggerToast(`Gemini Slot ${slotIndex} config permanently saved! 💾`);
       fetchConfig();
     } catch (err) {
       alert(err.message);
@@ -1368,57 +1467,12 @@ function AdminPanelPage({ navTo, triggerToast }) {
     }
   };
 
-  // Default provider save
-  const saveDefaultProvider = async (provider) => {
-    setBusy(true);
-    try {
-      const { error } = await supabase
-        .from('api_config')
-        .upsert({
-          id: 'config',
-          default_provider: provider,
-          updated_at: new Date().toISOString()
-        });
-
-      if (error) throw error;
-      setConfig(prev => ({ ...prev, defaultProvider: provider }));
-      triggerToast(`Default AI provider set to ${provider.toUpperCase()}! 🤖`);
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Fallback key management operations
-  const addFallbackKey = (provider) => {
-    if (!newFallbackKey) return;
-    setConfig(prev => {
-      const providerData = prev[provider] || { keys: [] };
-      const currentKeys = providerData.keys || [];
-      if (currentKeys.includes(newFallbackKey)) return prev;
-      return {
-        ...prev,
-        [provider]: {
-          ...providerData,
-          keys: [...currentKeys, newFallbackKey]
-        }
-      };
-    });
-    setNewFallbackKey('');
-  };
-
-  const removeFallbackKey = (provider, index) => {
-    setConfig(prev => {
-      const providerData = prev[provider];
-      return {
-        ...prev,
-        [provider]: {
-          ...providerData,
-          keys: providerData.keys.filter((_, idx) => idx !== index)
-        }
-      };
-    });
+  // Clear specific slot
+  const clearKeySlot = (slotIndex) => {
+    setConfig(prev => ({
+      ...prev,
+      [`gemini_api_${slotIndex}_key`]: ''
+    }));
   };
 
   if (!session) {
@@ -1435,7 +1489,7 @@ function AdminPanelPage({ navTo, triggerToast }) {
                 type="text"
                 value={usernameInput}
                 onChange={e => setUsernameInput(e.target.value)}
-                placeholder="Enter admin username (e.g. Sohel)"
+                placeholder=""
                 required
               />
             </div>
@@ -1445,7 +1499,7 @@ function AdminPanelPage({ navTo, triggerToast }) {
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Enter admin password"
+                placeholder=""
                 required
               />
             </div>
@@ -1483,7 +1537,7 @@ function AdminPanelPage({ navTo, triggerToast }) {
           </div>
           <div className="stat-summary-card">
             <span className="stat-label">AI Diagnostic Test</span>
-            <button className="run-diag-btn" onClick={() => runKeyDiagnostic(activeTab)}>
+            <button className="run-diag-btn" onClick={runKeyDiagnostic}>
               ⚡ Run Diagnostic
             </button>
           </div>
@@ -1505,111 +1559,77 @@ function AdminPanelPage({ navTo, triggerToast }) {
 
         {/* Keys Configuration Panel */}
         <div className="dash-card">
-          <h2>🔑 API Key Manager</h2>
+          <h2>🔑 Gemini API Slots (Exclusively Google Gemini)</h2>
           
-          <div className="form-group">
-            <label>Default AI Provider</label>
-            <select
-              value={config.defaultProvider}
-              onChange={e => saveDefaultProvider(e.target.value)}
-            >
-              <option value="gemini">Gemini (Google)</option>
-              <option value="openai">OpenAI (ChatGPT)</option>
-              <option value="openrouter">OpenRouter</option>
-            </select>
-          </div>
+          <div className="slots-layout" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {[1, 2, 3, 4, 5].map(idx => {
+              const keyVal = config[`gemini_api_${idx}_key`] || '';
+              const modelVal = config[`gemini_api_${idx}_model`] || 'gemini-1.5-flash';
+              const isConfigured = keyVal.trim() !== '';
 
-          <div className="provider-tabs">
-            {['gemini', 'openai', 'openrouter'].map(p => (
-              <button
-                key={p}
-                className={`tab-btn ${activeTab === p ? 'active' : ''}`}
-                onClick={() => { setActiveTab(p); setNewFallbackKey(''); }}
-              >
-                {p.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
-          {['gemini', 'openai', 'openrouter'].map(p => {
-            if (activeTab !== p) return null;
-            const pData = config[p] || { defaultModel: '', activeKey: '', keys: [] };
-
-            return (
-              <div key={p} className="tab-content">
-                <div className="form-group">
-                  <label>Default Model</label>
-                  <input
-                    type="text"
-                    value={pData.defaultModel || ''}
-                    onChange={e => setConfig(prev => ({
-                      ...prev,
-                      [p]: { ...prev[p], defaultModel: e.target.value }
-                    }))}
-                    placeholder="e.g. gemini-3.1-flash-lite"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Active / Primary Key</label>
-                  <input
-                    type="password"
-                    value={pData.activeKey || ''}
-                    onChange={e => setConfig(prev => ({
-                      ...prev,
-                      [p]: { ...prev[p], activeKey: e.target.value }
-                    }))}
-                    placeholder="Enter primary API key"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Fallback Keys List</label>
-                  <div className="fallback-list">
-                    {(pData.keys || []).map((k, idx) => (
-                      <div key={idx} className="fallback-item">
-                        <span className="key-mask">
-                          {k.length > 15 ? `${k.substring(0, 6)}...${k.substring(k.length - 4)}` : k}
-                        </span>
-                        <button
-                          type="button"
-                          className="remove-key-btn"
-                          onClick={() => removeFallbackKey(p, idx)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
+              return (
+                <div key={idx} className="slot-card" style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h3 style={{ margin: 0, fontSize: '1rem', color: '#667EEA' }}>Gemini API Slot {idx}</h3>
+                    <span style={{ fontSize: '0.78rem', padding: '2px 8px', borderRadius: '6px', background: isConfigured ? 'rgba(72,187,120,0.15)' : 'rgba(255,255,255,0.05)', color: isConfigured ? '#48BB78' : '#A0AEC0' }}>
+                      {isConfigured ? 'Saved & Active' : 'Not Configured'}
+                    </span>
                   </div>
-                  
-                  <div className="add-key-row">
+
+                  <div className="form-group" style={{ marginBottom: '10px' }}>
+                    <label>API Key</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type={showKeys[idx] ? 'text' : 'password'}
+                        value={keyVal}
+                        onChange={e => setConfig(prev => ({ ...prev, [`gemini_api_${idx}_key`]: e.target.value }))}
+                        placeholder="Paste Gemini API key"
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        className="cta-btn cta-secondary"
+                        onClick={() => setShowKeys(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                        style={{ padding: '0 12px', minHeight: 'auto' }}
+                      >
+                        {showKeys[idx] ? '👁️ Hide' : '👁️ Show'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: '14px' }}>
+                    <label>Model Configuration</label>
                     <input
-                      type="password"
-                      value={newFallbackKey}
-                      onChange={e => setNewFallbackKey(e.target.value)}
-                      placeholder="Add fallback API key"
+                      type="text"
+                      value={modelVal}
+                      onChange={e => setConfig(prev => ({ ...prev, [`gemini_api_${idx}_model`]: e.target.value }))}
+                      placeholder="e.g. gemini-1.5-flash"
                     />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="cta-btn cta-secondary"
+                      onClick={() => clearKeySlot(idx)}
+                      style={{ padding: '6px 12px', minHeight: 'auto', background: 'rgba(229,62,62,0.15)', color: '#E53E3E' }}
+                    >
+                      Clear Key
+                    </button>
                     <button
                       type="button"
                       className="cta-btn"
-                      onClick={() => addFallbackKey(p)}
+                      onClick={() => saveKeySlot(idx)}
+                      disabled={busy}
+                      style={{ padding: '6px 16px', minHeight: 'auto' }}
                     >
-                      Add
+                      Save Configuration
                     </button>
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  className="cta-btn save-keys-btn"
-                  onClick={() => saveProviderKeys(p)}
-                  disabled={busy}
-                >
-                  Save {p.toUpperCase()} Config
-                </button>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

@@ -2,14 +2,20 @@
 create extension if not exists http;
 
 -- ========================================================
--- API Keys Configuration Table
+-- API Keys Configuration Table (Exclusively Gemini, 5 Slots)
 -- ========================================================
 create table if not exists public.api_config (
     id text primary key default 'config',
-    default_provider text default 'gemini',
-    gemini jsonb default '{"defaultModel": "gemini-3.1-flash-lite", "activeKey": "", "keys": []}'::jsonb,
-    openai jsonb default '{"defaultModel": "gpt-4o-mini", "activeKey": "", "keys": []}'::jsonb,
-    openrouter jsonb default '{"defaultModel": "openai/gpt-4o-mini", "activeKey": "", "keys": []}'::jsonb,
+    gemini_api_1_key text default '',
+    gemini_api_1_model text default 'gemini-1.5-flash',
+    gemini_api_2_key text default '',
+    gemini_api_2_model text default 'gemini-1.5-flash',
+    gemini_api_3_key text default '',
+    gemini_api_3_model text default 'gemini-1.5-flash',
+    gemini_api_4_key text default '',
+    gemini_api_4_model text default 'gemini-1.5-flash',
+    gemini_api_5_key text default '',
+    gemini_api_5_model text default 'gemini-1.5-flash',
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -27,28 +33,21 @@ create table if not exists public.admin_profile (
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- ========================================================
--- OTP Caching Table for recovery requests
--- ========================================================
-create table if not exists public.admin_recovery_otp (
-    id uuid primary key default gen_random_uuid(),
-    method text not null, -- 'email', 'backup_email', 'phone', 'backup_phone'
-    destination text not null,
-    otp_code text not null,
-    expires_at timestamp with time zone not null,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
 -- Enable Row Level Security (RLS)
 alter table public.api_config enable row level security;
 alter table public.admin_profile enable row level security;
-alter table public.admin_recovery_otp enable row level security;
 
 -- Setup RLS Policies: Authenticated Admin access only
+drop policy if exists "Allow auth read config" on public.api_config;
 create policy "Allow auth read config" on public.api_config for select to authenticated using (true);
+
+drop policy if exists "Allow auth write config" on public.api_config;
 create policy "Allow auth write config" on public.api_config for all to authenticated using (true);
 
+drop policy if exists "Allow auth read profile" on public.admin_profile;
 create policy "Allow auth read profile" on public.admin_profile for select to authenticated using (true);
+
+drop policy if exists "Allow auth write profile" on public.admin_profile;
 create policy "Allow auth write profile" on public.admin_profile for all to authenticated using (true);
 
 -- Insert initial records if not exists
@@ -69,11 +68,7 @@ begin
     if profile_record.username = input_username then
         return json_build_object(
             'success', true, 
-            'password_hash', profile_record.password_hash, 
-            'primary_email', profile_record.primary_email,
-            'recovery_email', profile_record.recovery_email,
-            'primary_phone', profile_record.primary_phone,
-            'recovery_phone', profile_record.recovery_phone
+            'password_hash', profile_record.password_hash
         );
     else
         return json_build_object('success', false);
@@ -81,137 +76,51 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- 2. Trigger Password Recovery OTP Generation
-create or replace function public.request_recovery_otp(target_method text)
-returns json as $$
-declare
-    profile_record record;
-    dest text;
-    generated_otp text;
-    expiry timestamp with time zone;
-begin
-    select * into profile_record from public.admin_profile where id = 'profile';
-    
-    if target_method = 'primary_email' then
-        dest := profile_record.primary_email;
-    elsif target_method = 'backup_email' then
-        dest := profile_record.recovery_email;
-    elsif target_method = 'primary_phone' then
-        dest := profile_record.primary_phone;
-    elsif target_method = 'backup_phone' then
-        dest := profile_record.recovery_phone;
-    else
-        return json_build_object('success', false, 'error', 'Invalid recovery method selected');
-    end if;
-
-    if dest is null or dest = '' then
-        return json_build_object('success', false, 'error', 'The selected recovery destination is not configured');
-    end if;
-
-    -- Generate 6 digit OTP
-    generated_otp := floor(100000 + random() * 900000)::text;
-    expiry := now() + interval '5 minutes';
-
-    -- Clear existing OTPs for this method
-    delete from public.admin_recovery_otp where destination = dest;
-
-    -- Insert new request
-    insert into public.admin_recovery_otp (method, destination, otp_code, expires_at)
-    values (target_method, dest, generated_otp, expiry);
-
-    -- Log OTP securely to server database logs (for debugging/fallback read)
-    raise log 'InspireApp Admin OTP requested for % : %', dest, generated_otp;
-
-    -- Note: Real email notification can be done via database hook, but returning destination for UI masking
-    return json_build_object(
-        'success', true, 
-        'destination_masked', overlay(dest placing '***' from 3 for 5),
-        'otp_debug', generated_otp -- Provided for offline development testing locally
-    );
-end;
-$$ language plpgsql security definer;
-
--- 3. Verify OTP Code and return password reset token
-create or replace function public.verify_recovery_otp(target_method text, entered_otp text)
-returns json as $$
-declare
-    profile_record record;
-    dest text;
-    otp_record record;
-begin
-    select * into profile_record from public.admin_profile where id = 'profile';
-    
-    if target_method = 'primary_email' then
-        dest := profile_record.primary_email;
-    elsif target_method = 'backup_email' then
-        dest := profile_record.recovery_email;
-    elsif target_method = 'primary_phone' then
-        dest := profile_record.primary_phone;
-    elsif target_method = 'backup_phone' then
-        dest := profile_record.recovery_phone;
-    else
-        return json_build_object('success', false, 'error', 'Invalid recovery method');
-    end if;
-
-    select * into otp_record from public.admin_recovery_otp 
-    where destination = dest and otp_code = entered_otp;
-
-    if not found then
-        return json_build_object('success', false, 'error', 'Invalid OTP code');
-    end if;
-
-    if now() > otp_record.expires_at then
-        delete from public.admin_recovery_otp where id = otp_record.id;
-        return json_build_object('success', false, 'error', 'OTP code has expired');
-    end if;
-
-    -- Clear used OTP
-    delete from public.admin_recovery_otp where id = otp_record.id;
-
-    return json_build_object('success', true, 'reset_token', md5(now()::text || random()::text));
-end;
-$$ language plpgsql security definer;
-
--- 4. Apply Password Reset
-create or replace function public.reset_admin_password(reset_secret text, new_password_hash text)
-returns json as $$
-begin
-    -- Simple check to prevent unauthorized resetting
-    if reset_secret is null or length(reset_secret) < 10 then
-         return json_build_object('success', false, 'error', 'Invalid authorization token');
-    end if;
-
-    update public.admin_profile
-    set password_hash = new_password_hash,
-        updated_at = now()
-    where id = 'profile';
-
-    return json_build_object('success', true);
-end;
-$$ language plpgsql security definer;
-
--- 5. Gemini Caller
-create or replace function public.fetch_gemini_ai(model_name text, api_key text, prompt_text text)
+-- 2. Gemini Caller Supporting Text & Multimedia File Attachments
+create or replace function public.fetch_gemini_multimodal(
+    model_name text, 
+    api_key text, 
+    prompt_text text,
+    file_mime text,
+    file_base64 text
+)
 returns text as $$
 declare
     request_url text;
-    payload text;
+    payload_json jsonb;
+    parts_array jsonb[];
     response_data record;
     response_json json;
     result_text text;
 begin
     request_url := 'https://generativelanguage.googleapis.com/v1beta/models/' || encode_url_path(model_name) || ':generateContent?key=' || api_key;
-    payload := json_build_object(
+    
+    parts_array := array[]::jsonb[];
+
+    -- If base64 file is attached, inject inlineData part
+    if file_base64 is not null and file_base64 != '' and file_mime is not null and file_mime != '' then
+        parts_array := array_append(parts_array, json_build_object(
+            'inlineData', json_build_object(
+                'mimeType', file_mime,
+                'data', file_base64
+            )
+        )::jsonb);
+    end if;
+
+    -- Inject prompt part
+    parts_array := array_append(parts_array, json_build_object(
+        'text', coalesce(prompt_text, '')
+    )::jsonb);
+
+    payload_json := json_build_object(
         'contents', json_build_array(
             json_build_object(
-                'parts', json_build_array(
-                    json_build_object('text', prompt_text)
-                )
+                'parts', parts_array
             )
         )
-    )::text;
+    );
 
-    select * into response_data from http_post(request_url, payload, 'application/json');
+    select * into response_data from http_post(request_url, payload_json::text, 'application/json');
 
     if response_data.status = 200 then
         response_json := response_data.content::json;
@@ -223,113 +132,70 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- 6. OpenAI-like Caller (OpenAI, OpenRouter, Groq, Deepseek, Mistral)
-create or replace function public.fetch_openai_like_ai(endpoint_url text, model_name text, api_key text, prompt_text text)
-returns text as $$
-declare
-    payload text;
-    response_data record;
-    response_json json;
-    result_text text;
-    headers http_header[];
-begin
-    payload := json_build_object(
-        'model', model_name,
-        'messages', json_build_array(
-            json_build_object('role', 'user', 'content', prompt_text)
-        ),
-        'temperature', 0.8
-    )::text;
-
-    headers := array[
-        http_header('Content-Type', 'application/json'),
-        http_header('Authorization', 'Bearer ' || api_key),
-        http_header('HTTP-Referer', 'https://github.com/OrbitSyncAI/InspireApp'),
-        http_header('X-Title', 'InspireApp')
-    ];
-
-    select * into response_data from http((
-        'POST',
-        endpoint_url,
-        headers,
-        'application/json',
-        payload
-    )::http_request);
-
-    if response_data.status = 200 then
-        response_json := response_data.content::json;
-        result_text := response_json->'choices'->0->'message'->>'content';
-        return result_text;
-    else
-        raise exception 'AI Provider API returned status % with payload %', response_data.status, response_data.content;
-    end if;
-end;
-$$ language plpgsql security definer;
-
--- 7. Unified Generation RPC (Publicly Callable, Keys are Safe)
-create or replace function public.generate_ai_quote(provider text, model text, prompt text)
+-- 3. Unified Generation RPC: Loops 5 Gemini Slots (Publicly Callable, Keys are Safe)
+create or replace function public.generate_ai_response(
+    prompt text,
+    mime_type text default '',
+    base64_data text default ''
+)
 returns json as $$
 declare
     config_record record;
-    provider_config jsonb;
-    target_model text;
-    api_key text;
-    keys_list text[];
+    slot_key text;
+    slot_model text;
+    final_prompt text;
     result_text text;
     error_msg text;
 begin
     -- Load keys config from secure table
     select * into config_record from public.api_config where id = 'config';
     
-    if provider = 'gemini' then
-        provider_config := config_record.gemini;
-    elsif provider = 'openai' then
-        provider_config := config_record.openai;
-    elsif provider = 'openrouter' then
-        provider_config := config_record.openrouter;
-    else
-        return json_build_object('success', false, 'error', 'Unsupported AI provider');
+    final_prompt := prompt;
+    if final_prompt is null or final_prompt = '' then
+        final_prompt := 'Generate 5 high quality inspirational, motivational, or life quotes in English. Format each quote on a new line with its author. Output only the quotes, no other conversational intro/outro text.';
     end if;
 
-    target_model := coalesce(nullif(model, ''), provider_config->>'defaultModel');
-    
-    -- Extract keys
-    api_key := provider_config->>'activeKey';
-    if provider_config->'keys' is not null then
-        keys_list := array(select jsonb_array_elements_text(provider_config->'keys'));
-    end if;
-
-    -- Add primary key to list if not already there
-    if api_key is not null and api_key != '' then
-        if not (keys_list @> array[api_key]) then
-            keys_list := api_key || keys_list;
+    -- Loop 5 Slots sequentially
+    for i in 1..5 loop
+        -- Dynamic slot extraction
+        if i = 1 then
+            slot_key := config_record.gemini_api_1_key;
+            slot_model := config_record.gemini_api_1_model;
+        elsif i = 2 then
+            slot_key := config_record.gemini_api_2_key;
+            slot_model := config_record.gemini_api_2_model;
+        elsif i = 3 then
+            slot_key := config_record.gemini_api_3_key;
+            slot_model := config_record.gemini_api_3_model;
+        elsif i = 4 then
+            slot_key := config_record.gemini_api_4_key;
+            slot_model := config_record.gemini_api_4_model;
+        elsif i = 5 then
+            slot_key := config_record.gemini_api_5_key;
+            slot_model := config_record.gemini_api_5_model;
         end if;
-    end if;
 
-    if array_length(keys_list, 1) is null or array_length(keys_list, 1) = 0 then
-        return json_build_object('success', false, 'error', 'No API keys configured on server for this provider');
-    end if;
+        -- Attempt to call if key is present
+        if slot_key is not null and slot_key != '' then
+            begin
+                result_text := public.fetch_gemini_multimodal(
+                    coalesce(slot_model, 'gemini-1.5-flash'),
+                    slot_key,
+                    final_prompt,
+                    mime_type,
+                    base64_data
+                );
 
-    -- Attempt generation with fallback keys
-    for i in 1..array_length(keys_list, 1) loop
-        begin
-            if provider = 'gemini' then
-                result_text := public.fetch_gemini_ai(target_model, keys_list[i], prompt);
-            elsif provider = 'openai' then
-                result_text := public.fetch_openai_like_ai('https://api.openai.com/v1/chat/completions', target_model, keys_list[i], prompt);
-            elsif provider = 'openrouter' then
-                result_text := public.fetch_openai_like_ai('https://openrouter.ai/api/v1/chat/completions', target_model, keys_list[i], prompt);
-            end if;
-
-            -- If successful, return result
-            return json_build_object('success', true, 'text', result_text);
-        exception when others then
-            error_msg := SQLERRM;
-            -- Continue to next key in loop
-        end;
+                -- Success, return immediately
+                return json_build_object('success', true, 'text', result_text);
+            exception when others then
+                error_msg := SQLERRM;
+                -- Continue loop to next slot fallback
+            end;
+        end if;
     end loop;
 
-    return json_build_object('success', false, 'error', 'All configured keys failed. Last error: ' || coalesce(error_msg, 'Unknown'));
+    return json_build_object('success', false, 'error', 'All configured Gemini slots failed or no key is configured. Last error: ' || coalesce(error_msg, 'None'));
 end;
 $$ language plpgsql security definer;
 
