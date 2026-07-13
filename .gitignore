@@ -3,3 +3,6 @@ dist
 dist-builds
 *_job_log*.txt
 preview-server.cjs
+server/keys.json
+server/node_modules
+.env

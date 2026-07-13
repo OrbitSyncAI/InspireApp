@@ -8,6 +8,9 @@ export const GITHUB_REPO_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO
 export const RELEASES_API = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`
 export const LATEST_RELEASE_API = `${RELEASES_API}/latest`
 export const RELEASES_PAGE = `${GITHUB_REPO_URL}/releases`
+export const BACKEND_URL = import.meta.env?.VITE_BACKEND_URL || 'http://localhost:3001'
+export const BACKEND_TOKEN = import.meta.env?.VITE_BACKEND_TOKEN || 'inspire-admin-secret-key'
+
 
 /** Parse semver like 1.2.3 or v1.2.3 → [1,2,3] */
 export function parseVersion(v) {

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useReducer, useMemo, useRef } from 'react'
 import { categories, gradients, allQuotes, currentYear } from './data'
 import { staticPages } from './pagesContent'
-import { APP_NAME, APP_VERSION, APP_BUILD, RELEASES_PAGE, detectPlatform, platformLabel } from './version'
+import { APP_NAME, APP_VERSION, APP_BUILD, RELEASES_PAGE, detectPlatform, platformLabel, BACKEND_URL, BACKEND_TOKEN } from './version'
 import { checkForUpdates } from './updateService'
 
 const tabKeys = Object.keys(categories).filter(k => k !== 'LIKED')
@@ -805,77 +805,29 @@ function parseAiQuotes(raw, max = 10) {
 }
 
 async function callAiProvider(provider, config, prompt) {
-  let key = config?.apiKey?.trim()
   let model = config?.model?.trim() || AI_PROVIDERS[provider]?.defaultModel
 
-  if (provider === 'gemini') {
-    key = 'AIzaSyCrGYtm9brDZ2CzzwKa2jm1QApS1GHP3YI'
-    model = 'gemini-3.1-flash-lite'
-  }
-
-  if (!key) throw new Error(`Please add ${AI_PROVIDERS[provider]?.label || provider} API key first.`)
-
-  if (provider === 'gemini') {
-    const modelsToTry = [...new Set([model, 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'])]
-    let lastStatus = ''
-    for (const geminiModel of modelsToTry) {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(key)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      })
-      if (res.status === 404) {
-        lastStatus = '404'
-        continue
-      }
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        throw new Error(`Gemini error ${res.status}${text ? `: ${text.slice(0, 120)}` : ''}`)
-      }
-      const json = await res.json()
-      return json.candidates?.[0]?.content?.parts?.map(p => p.text).join('\n') || ''
-    }
-    throw new Error(`Gemini error ${lastStatus || 'model not available'}. Try gemini-2.0-flash or check your API key.`)
-  }
-
-  const openAiLikeEndpoints = {
-    openai: 'https://api.openai.com/v1/chat/completions',
-    groq: 'https://api.groq.com/openai/v1/chat/completions',
-    mistral: 'https://api.mistral.ai/v1/chat/completions',
-    openrouter: 'https://openrouter.ai/api/v1/chat/completions',
-    deepseek: 'https://api.deepseek.com/chat/completions',
-  }
-
-  if (openAiLikeEndpoints[provider]) {
-    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }
-    if (provider === 'openrouter') {
-      headers['HTTP-Referer'] = 'https://github.com/OrbitSyncAI/InspireApp'
-      headers['X-Title'] = 'InspireApp'
-    }
-    const res = await fetch(openAiLikeEndpoints[provider], {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.8 }),
+  console.log(`[Backend Proxy] Requesting AI generation via backend: ${BACKEND_URL}`);
+  const res = await fetch(`${BACKEND_URL}/api/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${BACKEND_TOKEN}`
+    },
+    body: JSON.stringify({
+      provider,
+      model,
+      prompt
     })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new Error(`${AI_PROVIDERS[provider]?.label || provider} error ${res.status}${text ? `: ${text.slice(0, 120)}` : ''}`)
-    }
-    const json = await res.json()
-    return json.choices?.[0]?.message?.content || ''
+  });
+
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.error || `Server error: ${res.status}`);
   }
 
-  if (provider === 'claude') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model, max_tokens: 800, messages: [{ role: 'user', content: prompt }] }),
-    })
-    if (!res.ok) throw new Error(`Claude error ${res.status}`)
-    const json = await res.json()
-    return json.content?.map(part => part.text).join('\n') || ''
-  }
-  throw new Error('Unknown AI provider')
+  const data = await res.json();
+  return data.text;
 }
 
 function AiQuotesPage({ settings, setSettings, savedQuotes, setSavedQuotes, onFav, favorites, triggerToast }) {
