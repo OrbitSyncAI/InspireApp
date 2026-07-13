@@ -1211,16 +1211,6 @@ function AdminPanelPage({ navTo, triggerToast }) {
   const [loginError, setLoginError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Forgot Password States
-  const [forgotMode, setForgotMode] = useState(false);
-  const [forgotStep, setForgotStep] = useState(1); // 1 = Select Method, 2 = Enter OTP, 3 = Reset Password
-  const [recoveryMethod, setRecoveryMethod] = useState('primary_email');
-  const [otpInput, setOtpInput] = useState('');
-  const [newPassInput, setNewPassInput] = useState('');
-  const [resetToken, setResetToken] = useState('');
-  const [forgotMessage, setForgotMessage] = useState('');
-  const [forgotError, setForgotError] = useState('');
-
   // Diagnostic Logs Terminal State
   const [diagnosticLogs, setDiagnosticLogs] = useState([
     `[${new Date().toLocaleTimeString()}] System ready. Press "Run Diagnostic" to test key connectivity.`
@@ -1238,22 +1228,6 @@ function AdminPanelPage({ navTo, triggerToast }) {
   
   // Custom Local Key management inputs
   const [newFallbackKey, setNewFallbackKey] = useState('');
-
-  // Profile management states
-  const [profile, setProfile] = useState({
-    username: '',
-    primaryEmail: '',
-    recoveryEmail: '',
-    primaryPhone: '',
-    recoveryPhone: ''
-  });
-  
-  const [editUsername, setEditUsername] = useState('');
-  const [editPrimaryEmail, setEditPrimaryEmail] = useState('');
-  const [editRecoveryEmail, setEditRecoveryEmail] = useState('');
-  const [editPrimaryPhone, setEditPrimaryPhone] = useState('');
-  const [editRecoveryPhone, setEditRecoveryPhone] = useState('');
-  const [newProfilePassword, setNewProfilePassword] = useState('');
 
   // Fetch configuration
   const fetchConfig = useCallback(async () => {
@@ -1279,42 +1253,11 @@ function AdminPanelPage({ navTo, triggerToast }) {
     }
   }, [triggerToast]);
 
-  // Fetch admin profile
-  const fetchProfile = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('admin_profile')
-        .select('*')
-        .eq('id', 'profile')
-        .single();
-      
-      if (error) throw error;
-      if (data) {
-        const loaded = {
-          username: data.username || '',
-          primaryEmail: data.primary_email || '',
-          recoveryEmail: data.recovery_email || '',
-          primaryPhone: data.primary_phone || '',
-          recoveryPhone: data.recovery_phone || ''
-        };
-        setProfile(loaded);
-        setEditUsername(loaded.username);
-        setEditPrimaryEmail(loaded.primaryEmail);
-        setEditRecoveryEmail(loaded.recoveryEmail);
-        setEditPrimaryPhone(loaded.primaryPhone);
-        setEditRecoveryPhone(loaded.recoveryPhone);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }, []);
-
   useEffect(() => {
     if (session) {
       fetchConfig();
-      fetchProfile();
     }
-  }, [session, fetchConfig, fetchProfile]);
+  }, [session, fetchConfig]);
 
   const addLog = (msg) => {
     setDiagnosticLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -1393,92 +1336,8 @@ function AdminPanelPage({ navTo, triggerToast }) {
     setSession(null);
     setUsernameInput('');
     setPassword('');
-    setForgotMode(false);
-    setForgotStep(1);
-    setForgotError('');
-    setForgotMessage('');
+    setLoginError('');
     triggerToast('Logged out! 🔒');
-  };
-
-  // Forgot password flows
-  const triggerForgotPassword = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setForgotError('');
-    setForgotMessage('');
-    try {
-      const { data, error } = await supabase.rpc('request_recovery_otp', {
-        target_method: recoveryMethod
-      });
-      if (error) throw error;
-      if (data && data.success === true) {
-        setForgotMessage(`Verification code sent to destination ending in: "${data.destination_masked}". (Debug OTP: ${data.otp_debug})`);
-        setForgotStep(2);
-      } else {
-        throw new Error(data.error || 'Failed to request OTP');
-      }
-    } catch (err) {
-      setForgotError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const verifyOtp = async (e) => {
-    e.preventDefault();
-    if (!otpInput) return;
-    setBusy(true);
-    setForgotError('');
-    setForgotMessage('');
-    try {
-      const { data, error } = await supabase.rpc('verify_recovery_otp', {
-        target_method: recoveryMethod,
-        entered_otp: otpInput.trim()
-      });
-      if (error) throw error;
-      if (data && data.success === true) {
-        setResetToken(data.reset_token);
-        setForgotStep(3);
-        setForgotMessage('OTP verified! Enter your new password below.');
-      } else {
-        throw new Error(data.error || 'Verification failed');
-      }
-    } catch (err) {
-      setForgotError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const resetPassword = async (e) => {
-    e.preventDefault();
-    if (!newPassInput) return;
-    setBusy(true);
-    setForgotError('');
-    setForgotMessage('');
-    try {
-      const hashed = bcrypt.hashSync(newPassInput, 10);
-      const { data, error } = await supabase.rpc('reset_admin_password', {
-        reset_secret: resetToken,
-        new_password_hash: hashed
-      });
-
-      if (error) throw error;
-      if (data && data.success === true) {
-        triggerToast('Password reset successfully! 🔑');
-        setForgotMode(false);
-        setForgotStep(1);
-        setOtpInput('');
-        setNewPassInput('');
-        setResetToken('');
-      } else {
-        throw new Error(data.error || 'Reset failed');
-      }
-    } catch (err) {
-      setForgotError(err.message);
-    } finally {
-      setBusy(false);
-    }
   };
 
   // Keys Save Handler
@@ -1531,41 +1390,6 @@ function AdminPanelPage({ navTo, triggerToast }) {
     }
   };
 
-  // Profile save handler
-  const saveProfile = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const updates = {
-        id: 'profile',
-        username: editUsername.trim() || profile.username,
-        primary_email: editPrimaryEmail.trim() || profile.primaryEmail,
-        recovery_email: editRecoveryEmail.trim(),
-        primary_phone: editPrimaryPhone.trim(),
-        recovery_phone: editRecoveryPhone.trim(),
-        updated_at: new Date().toISOString()
-      };
-
-      if (newProfilePassword) {
-        updates.password_hash = bcrypt.hashSync(newProfilePassword, 10);
-      }
-
-      const { error } = await supabase
-        .from('admin_profile')
-        .upsert(updates);
-
-      if (error) throw error;
-
-      triggerToast('Profile updated successfully! 👤');
-      setNewProfilePassword('');
-      fetchProfile();
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   // Fallback key management operations
   const addFallbackKey = (provider) => {
     if (!newFallbackKey) return;
@@ -1602,128 +1426,36 @@ function AdminPanelPage({ navTo, triggerToast }) {
       <div className="static-page">
         <div className="static-card admin-auth-card">
           <h1>🔐 Admin Portal</h1>
-          <p>Login to securely configure API keys, models, and recovery settings on your database.</p>
+          <p>Login to securely configure API keys and models on your database.</p>
 
-          {!forgotMode ? (
-            <form onSubmit={handleLogin} className="admin-form">
-              <div className="form-group">
-                <label>Admin Username</label>
-                <input
-                  type="text"
-                  value={usernameInput}
-                  onChange={e => setUsernameInput(e.target.value)}
-                  placeholder="Enter admin username (e.g. Sohel)"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Enter admin password"
-                  required
-                />
-              </div>
-              {loginError && <p className="form-error">{loginError}</p>}
-              <div className="form-actions">
-                <button type="submit" className="cta-btn" disabled={busy}>
-                  {busy ? 'Authenticating...' : 'Login Securely'}
-                </button>
-                <button
-                  type="button"
-                  className="cta-btn cta-secondary"
-                  onClick={() => {
-                    setForgotMode(true);
-                    setForgotError('');
-                    setForgotMessage('');
-                  }}
-                >
-                  Forgot Password?
-                </button>
-              </div>
-            </form>
-          ) : (
-            <div className="admin-forgot-flow">
-              <h3>Reset Admin Password</h3>
-              {forgotError && <p className="form-error">{forgotError}</p>}
-              {forgotMessage && <p className="form-success">{forgotMessage}</p>}
-
-              {forgotStep === 1 && (
-                <form onSubmit={triggerForgotPassword} className="admin-form">
-                  <p className="step-note">Select your preferred destination channel to receive a 6-digit verification OTP.</p>
-                  
-                  <div className="form-group">
-                    <label>Select Recovery Option</label>
-                    <select
-                      value={recoveryMethod}
-                      onChange={e => setRecoveryMethod(e.target.value)}
-                    >
-                      <option value="primary_email">Primary Email (larsonsteve48@gmail.com)</option>
-                      <option value="backup_email">Backup Email</option>
-                      <option value="primary_phone">Primary Phone (9026053036)</option>
-                      <option value="backup_phone">Backup Phone Number</option>
-                    </select>
-                  </div>
-                  
-                  <div className="form-actions">
-                    <button type="submit" className="cta-btn" disabled={busy}>
-                      {busy ? 'Requesting...' : 'Request Verification OTP'}
-                    </button>
-                    <button type="button" className="cta-btn cta-secondary" onClick={() => setForgotMode(false)}>
-                      Back to Login
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {forgotStep === 2 && (
-                <form onSubmit={verifyOtp} className="admin-form">
-                  <p className="step-note">A 6-digit OTP code has been logged. Enter it below to authorize credential resetting.</p>
-                  <div className="form-group">
-                    <label>Enter 6-Digit OTP</label>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={otpInput}
-                      onChange={e => setOtpInput(e.target.value)}
-                      placeholder="Enter OTP code"
-                      required
-                    />
-                  </div>
-                  <div className="form-actions">
-                    <button type="submit" className="cta-btn" disabled={busy}>
-                      {busy ? 'Verifying...' : 'Verify OTP'}
-                    </button>
-                    <button type="button" className="cta-btn cta-secondary" onClick={() => setForgotStep(1)}>
-                      Back
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {forgotStep === 3 && (
-                <form onSubmit={resetPassword} className="admin-form">
-                  <div className="form-group">
-                    <label>New Password</label>
-                    <input
-                      type="password"
-                      value={newPassInput}
-                      onChange={e => setNewPassInput(e.target.value)}
-                      placeholder="Enter your new password"
-                      required
-                    />
-                  </div>
-                  <div className="form-actions">
-                    <button type="submit" className="cta-btn" disabled={busy}>
-                      {busy ? 'Saving...' : 'Reset Password'}
-                    </button>
-                  </div>
-                </form>
-              )}
+          <form onSubmit={handleLogin} className="admin-form">
+            <div className="form-group">
+              <label>Admin Username</label>
+              <input
+                type="text"
+                value={usernameInput}
+                onChange={e => setUsernameInput(e.target.value)}
+                placeholder="Enter admin username (e.g. Sohel)"
+                required
+              />
             </div>
-          )}
+            <div className="form-group">
+              <label>Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter admin password"
+                required
+              />
+            </div>
+            {loginError && <p className="form-error">{loginError}</p>}
+            <div className="form-actions">
+              <button type="submit" className="cta-btn" style={{ width: '100%' }} disabled={busy}>
+                {busy ? 'Authenticating...' : 'Login Securely'}
+              </button>
+            </div>
+          </form>
 
           <button className="cta-btn cta-secondary" style={{ marginTop: '20px', width: '100%' }} onClick={() => navTo('quotes')}>
             Back to Home
@@ -1735,7 +1467,7 @@ function AdminPanelPage({ navTo, triggerToast }) {
 
   return (
     <div className="static-page">
-      <div className="static-card static-wide admin-dashboard">
+      <div className="static-card static-wide admin-dashboard" style={{ maxWidth: '800px', margin: '0 auto' }}>
         <div className="dashboard-header">
           <h1>🔐 Admin Dashboard</h1>
           <button className="cta-btn cta-secondary logout-btn" onClick={handleLogout}>
@@ -1771,191 +1503,113 @@ function AdminPanelPage({ navTo, triggerToast }) {
           </div>
         </div>
 
-        <div className="dashboard-layout">
-          {/* Left Side: Keys Configuration */}
-          <div className="dashboard-column">
-            <div className="dash-card">
-              <h2>🔑 API Key Manager</h2>
-              
-              <div className="form-group">
-                <label>Default AI Provider</label>
-                <select
-                  value={config.defaultProvider}
-                  onChange={e => saveDefaultProvider(e.target.value)}
-                >
-                  <option value="gemini">Gemini (Google)</option>
-                  <option value="openai">OpenAI (ChatGPT)</option>
-                  <option value="openrouter">OpenRouter</option>
-                </select>
-              </div>
-
-              <div className="provider-tabs">
-                {['gemini', 'openai', 'openrouter'].map(p => (
-                  <button
-                    key={p}
-                    className={`tab-btn ${activeTab === p ? 'active' : ''}`}
-                    onClick={() => { setActiveTab(p); setNewFallbackKey(''); }}
-                  >
-                    {p.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-
-              {['gemini', 'openai', 'openrouter'].map(p => {
-                if (activeTab !== p) return null;
-                const pData = config[p] || { defaultModel: '', activeKey: '', keys: [] };
-
-                return (
-                  <div key={p} className="tab-content">
-                    <div className="form-group">
-                      <label>Default Model</label>
-                      <input
-                        type="text"
-                        value={pData.defaultModel || ''}
-                        onChange={e => setConfig(prev => ({
-                          ...prev,
-                          [p]: { ...prev[p], defaultModel: e.target.value }
-                        }))}
-                        placeholder="e.g. gemini-3.1-flash-lite"
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label>Active / Primary Key</label>
-                      <input
-                        type="password"
-                        value={pData.activeKey || ''}
-                        onChange={e => setConfig(prev => ({
-                          ...prev,
-                          [p]: { ...prev[p], activeKey: e.target.value }
-                        }))}
-                        placeholder="Enter primary API key"
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label>Fallback Keys List</label>
-                      <div className="fallback-list">
-                        {(pData.keys || []).map((k, idx) => (
-                          <div key={idx} className="fallback-item">
-                            <span className="key-mask">
-                              {k.length > 15 ? `${k.substring(0, 6)}...${k.substring(k.length - 4)}` : k}
-                            </span>
-                            <button
-                              type="button"
-                              className="remove-key-btn"
-                              onClick={() => removeFallbackKey(p, idx)}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      <div className="add-key-row">
-                        <input
-                          type="password"
-                          value={newFallbackKey}
-                          onChange={e => setNewFallbackKey(e.target.value)}
-                          placeholder="Add fallback API key"
-                        />
-                        <button
-                          type="button"
-                          className="cta-btn"
-                          onClick={() => addFallbackKey(p)}
-                        >
-                          Add
-                        </button>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="cta-btn save-keys-btn"
-                      onClick={() => saveProviderKeys(p)}
-                      disabled={busy}
-                    >
-                      Save {p.toUpperCase()} Config
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+        {/* Keys Configuration Panel */}
+        <div className="dash-card">
+          <h2>🔑 API Key Manager</h2>
+          
+          <div className="form-group">
+            <label>Default AI Provider</label>
+            <select
+              value={config.defaultProvider}
+              onChange={e => saveDefaultProvider(e.target.value)}
+            >
+              <option value="gemini">Gemini (Google)</option>
+              <option value="openai">OpenAI (ChatGPT)</option>
+              <option value="openrouter">OpenRouter</option>
+            </select>
           </div>
 
-          {/* Right Side: Profile Credentials */}
-          <div className="dashboard-column">
-            <div className="dash-card">
-              <h2>👤 Profile & Security</h2>
-              <form onSubmit={saveProfile} className="admin-form">
-                <p className="step-note">Change your recovery details or account credentials. Leave fields blank to keep them unchanged.</p>
+          <div className="provider-tabs">
+            {['gemini', 'openai', 'openrouter'].map(p => (
+              <button
+                key={p}
+                className={`tab-btn ${activeTab === p ? 'active' : ''}`}
+                onClick={() => { setActiveTab(p); setNewFallbackKey(''); }}
+              >
+                {p.toUpperCase()}
+              </button>
+            ))}
+          </div>
 
+          {['gemini', 'openai', 'openrouter'].map(p => {
+            if (activeTab !== p) return null;
+            const pData = config[p] || { defaultModel: '', activeKey: '', keys: [] };
+
+            return (
+              <div key={p} className="tab-content">
                 <div className="form-group">
-                  <label>Change Username</label>
+                  <label>Default Model</label>
                   <input
                     type="text"
-                    value={editUsername}
-                    onChange={e => setEditUsername(e.target.value)}
-                    placeholder="Enter new username"
+                    value={pData.defaultModel || ''}
+                    onChange={e => setConfig(prev => ({
+                      ...prev,
+                      [p]: { ...prev[p], defaultModel: e.target.value }
+                    }))}
+                    placeholder="e.g. gemini-3.1-flash-lite"
                   />
                 </div>
 
                 <div className="form-group">
-                  <label>Primary Email</label>
-                  <input
-                    type="email"
-                    value={editPrimaryEmail}
-                    onChange={e => setEditPrimaryEmail(e.target.value)}
-                    placeholder="Enter primary email"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Backup Email</label>
-                  <input
-                    type="email"
-                    value={editRecoveryEmail}
-                    onChange={e => setEditRecoveryEmail(e.target.value)}
-                    placeholder="Enter backup email"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Primary Phone</label>
-                  <input
-                    type="text"
-                    value={editPrimaryPhone}
-                    onChange={e => setEditPrimaryPhone(e.target.value)}
-                    placeholder="Enter primary phone number"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Backup Phone</label>
-                  <input
-                    type="text"
-                    value={editRecoveryPhone}
-                    onChange={e => setEditRecoveryPhone(e.target.value)}
-                    placeholder="Enter backup phone number"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Change Password</label>
+                  <label>Active / Primary Key</label>
                   <input
                     type="password"
-                    value={newProfilePassword}
-                    onChange={e => setNewProfilePassword(e.target.value)}
-                    placeholder="Enter new password"
+                    value={pData.activeKey || ''}
+                    onChange={e => setConfig(prev => ({
+                      ...prev,
+                      [p]: { ...prev[p], activeKey: e.target.value }
+                    }))}
+                    placeholder="Enter primary API key"
                   />
                 </div>
 
-                <button type="submit" className="cta-btn" disabled={busy}>
-                  Update Profile Credentials
+                <div className="form-group">
+                  <label>Fallback Keys List</label>
+                  <div className="fallback-list">
+                    {(pData.keys || []).map((k, idx) => (
+                      <div key={idx} className="fallback-item">
+                        <span className="key-mask">
+                          {k.length > 15 ? `${k.substring(0, 6)}...${k.substring(k.length - 4)}` : k}
+                        </span>
+                        <button
+                          type="button"
+                          className="remove-key-btn"
+                          onClick={() => removeFallbackKey(p, idx)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="add-key-row">
+                    <input
+                      type="password"
+                      value={newFallbackKey}
+                      onChange={e => setNewFallbackKey(e.target.value)}
+                      placeholder="Add fallback API key"
+                    />
+                    <button
+                      type="button"
+                      className="cta-btn"
+                      onClick={() => addFallbackKey(p)}
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="cta-btn save-keys-btn"
+                  onClick={() => saveProviderKeys(p)}
+                  disabled={busy}
+                >
+                  Save {p.toUpperCase()} Config
                 </button>
-              </form>
-            </div>
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

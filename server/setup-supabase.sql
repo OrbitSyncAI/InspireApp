@@ -19,7 +19,7 @@ create table if not exists public.api_config (
 create table if not exists public.admin_profile (
     id text primary key default 'profile',
     username text default 'Sohel',
-    password_hash text default '$2a$10$WixW37a/2yOaHn1B4zQnReQ1yG04v1N9Uo.z7DqF2YJqF7FvH3J.C', -- default: Sohel@5426@Khan
+    password_hash text default '$2b$10$dE7uFIioAo4krZwLJELcC.a6K1q3JGB/o15accQ5/Ocfren9nDwK2', -- default: Sohel@5426@Khan
     primary_email text default 'larsonsteve48@gmail.com',
     recovery_email text default '',
     primary_phone text default '9026053036',
