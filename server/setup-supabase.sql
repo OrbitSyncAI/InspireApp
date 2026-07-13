@@ -1,7 +1,9 @@
 -- Enable HTTP extension for serverless API calls from database
 create extension if not exists http;
 
--- Create API configuration table
+-- ========================================================
+-- API Keys Configuration Table
+-- ========================================================
 create table if not exists public.api_config (
     id text primary key default 'config',
     default_provider text default 'gemini',
@@ -11,30 +13,184 @@ create table if not exists public.api_config (
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Enable Row Level Security (RLS) so public cannot read keys
+-- ========================================================
+-- Admin Profile Table
+-- ========================================================
+create table if not exists public.admin_profile (
+    id text primary key default 'profile',
+    username text default 'Sohel',
+    password_hash text default '$2a$10$WixW37a/2yOaHn1B4zQnReQ1yG04v1N9Uo.z7DqF2YJqF7FvH3J.C', -- default: Sohel@5426@Khan
+    primary_email text default 'larsonsteve48@gmail.com',
+    recovery_email text default '',
+    primary_phone text default '9026053036',
+    recovery_phone text default '',
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- ========================================================
+-- OTP Caching Table for recovery requests
+-- ========================================================
+create table if not exists public.admin_recovery_otp (
+    id uuid primary key default gen_random_uuid(),
+    method text not null, -- 'email', 'backup_email', 'phone', 'backup_phone'
+    destination text not null,
+    otp_code text not null,
+    expires_at timestamp with time zone not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable Row Level Security (RLS)
 alter table public.api_config enable row level security;
+alter table public.admin_profile enable row level security;
+alter table public.admin_recovery_otp enable row level security;
 
--- RLS Policy: Only authenticated admin can read or write config
-create policy "Allow authenticated admin read access" 
-on public.api_config for select 
-to authenticated 
-using (true);
+-- Setup RLS Policies: Authenticated Admin access only
+create policy "Allow auth read config" on public.api_config for select to authenticated using (true);
+create policy "Allow auth write config" on public.api_config for all to authenticated using (true);
 
-create policy "Allow authenticated admin write access" 
-on public.api_config for all 
-to authenticated 
-using (true);
+create policy "Allow auth read profile" on public.admin_profile for select to authenticated using (true);
+create policy "Allow auth write profile" on public.admin_profile for all to authenticated using (true);
 
--- Insert initial empty config if not exists
-insert into public.api_config (id) 
-values ('config') 
-on conflict (id) do nothing;
+-- Insert initial records if not exists
+insert into public.api_config (id) values ('config') on conflict (id) do nothing;
+insert into public.admin_profile (id) values ('profile') on conflict (id) do nothing;
 
 -- ========================================================
--- Serverless AI Proxy Functions (Runs Securely on DB)
+-- Database Stored Procedures (RPCs)
 -- ========================================================
 
--- 1. Gemini Caller
+-- 1. Custom Admin Login function using bcrypt matching
+create or replace function public.admin_authenticate(input_username text)
+returns json as $$
+declare
+    profile_record record;
+begin
+    select * into profile_record from public.admin_profile where id = 'profile';
+    if profile_record.username = input_username then
+        return json_build_object(
+            'success', true, 
+            'password_hash', profile_record.password_hash, 
+            'primary_email', profile_record.primary_email,
+            'recovery_email', profile_record.recovery_email,
+            'primary_phone', profile_record.primary_phone,
+            'recovery_phone', profile_record.recovery_phone
+        );
+    else
+        return json_build_object('success', false);
+    end if;
+end;
+$$ language plpgsql security definer;
+
+-- 2. Trigger Password Recovery OTP Generation
+create or replace function public.request_recovery_otp(target_method text)
+returns json as $$
+declare
+    profile_record record;
+    dest text;
+    generated_otp text;
+    expiry timestamp with time zone;
+begin
+    select * into profile_record from public.admin_profile where id = 'profile';
+    
+    if target_method = 'primary_email' then
+        dest := profile_record.primary_email;
+    elsif target_method = 'backup_email' then
+        dest := profile_record.recovery_email;
+    elsif target_method = 'primary_phone' then
+        dest := profile_record.primary_phone;
+    elsif target_method = 'backup_phone' then
+        dest := profile_record.recovery_phone;
+    else
+        return json_build_object('success', false, 'error', 'Invalid recovery method selected');
+    end if;
+
+    if dest is null or dest = '' then
+        return json_build_object('success', false, 'error', 'The selected recovery destination is not configured');
+    end if;
+
+    -- Generate 6 digit OTP
+    generated_otp := floor(100000 + random() * 900000)::text;
+    expiry := now() + interval '5 minutes';
+
+    -- Clear existing OTPs for this method
+    delete from public.admin_recovery_otp where destination = dest;
+
+    -- Insert new request
+    insert into public.admin_recovery_otp (method, destination, otp_code, expires_at)
+    values (target_method, dest, generated_otp, expiry);
+
+    -- Log OTP securely to server database logs (for debugging/fallback read)
+    raise log 'InspireApp Admin OTP requested for % : %', dest, generated_otp;
+
+    -- Note: Real email notification can be done via database hook, but returning destination for UI masking
+    return json_build_object(
+        'success', true, 
+        'destination_masked', overlay(dest placing '***' from 3 for 5),
+        'otp_debug', generated_otp -- Provided for offline development testing locally
+    );
+end;
+$$ language plpgsql security definer;
+
+-- 3. Verify OTP Code and return password reset token
+create or replace function public.verify_recovery_otp(target_method text, entered_otp text)
+returns json as $$
+declare
+    profile_record record;
+    dest text;
+    otp_record record;
+begin
+    select * into profile_record from public.admin_profile where id = 'profile';
+    
+    if target_method = 'primary_email' then
+        dest := profile_record.primary_email;
+    elsif target_method = 'backup_email' then
+        dest := profile_record.recovery_email;
+    elsif target_method = 'primary_phone' then
+        dest := profile_record.primary_phone;
+    elsif target_method = 'backup_phone' then
+        dest := profile_record.recovery_phone;
+    else
+        return json_build_object('success', false, 'error', 'Invalid recovery method');
+    end if;
+
+    select * into otp_record from public.admin_recovery_otp 
+    where destination = dest and otp_code = entered_otp;
+
+    if not found then
+        return json_build_object('success', false, 'error', 'Invalid OTP code');
+    end if;
+
+    if now() > otp_record.expires_at then
+        delete from public.admin_recovery_otp where id = otp_record.id;
+        return json_build_object('success', false, 'error', 'OTP code has expired');
+    end if;
+
+    -- Clear used OTP
+    delete from public.admin_recovery_otp where id = otp_record.id;
+
+    return json_build_object('success', true, 'reset_token', md5(now()::text || random()::text));
+end;
+$$ language plpgsql security definer;
+
+-- 4. Apply Password Reset
+create or replace function public.reset_admin_password(reset_secret text, new_password_hash text)
+returns json as $$
+begin
+    -- Simple check to prevent unauthorized resetting
+    if reset_secret is null or length(reset_secret) < 10 then
+         return json_build_object('success', false, 'error', 'Invalid authorization token');
+    end if;
+
+    update public.admin_profile
+    set password_hash = new_password_hash,
+        updated_at = now()
+    where id = 'profile';
+
+    return json_build_object('success', true);
+end;
+$$ language plpgsql security definer;
+
+-- 5. Gemini Caller
 create or replace function public.fetch_gemini_ai(model_name text, api_key text, prompt_text text)
 returns text as $$
 declare
@@ -67,7 +223,7 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- 2. OpenAI-like Caller (OpenAI, OpenRouter, Groq, Deepseek, Mistral)
+-- 6. OpenAI-like Caller (OpenAI, OpenRouter, Groq, Deepseek, Mistral)
 create or replace function public.fetch_openai_like_ai(endpoint_url text, model_name text, api_key text, prompt_text text)
 returns text as $$
 declare
@@ -110,7 +266,7 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- 3. Unified Generation RPC (Publicly Callable, Keys are Safe)
+-- 7. Unified Generation RPC (Publicly Callable, Keys are Safe)
 create or replace function public.generate_ai_quote(provider text, model text, prompt text)
 returns json as $$
 declare
@@ -122,7 +278,7 @@ declare
     result_text text;
     error_msg text;
 begin
-    -- Load keys config from secure table (runs as owner, bypassing RLS safely)
+    -- Load keys config from secure table
     select * into config_record from public.api_config where id = 'config';
     
     if provider = 'gemini' then

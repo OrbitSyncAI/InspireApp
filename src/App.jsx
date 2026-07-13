@@ -4,6 +4,7 @@ import { staticPages } from './pagesContent'
 import { APP_NAME, APP_VERSION, APP_BUILD, RELEASES_PAGE, detectPlatform, platformLabel, SUPABASE_URL, SUPABASE_ANON_KEY } from './version'
 import { checkForUpdates } from './updateService'
 import { createClient } from '@supabase/supabase-js'
+import bcrypt from 'bcryptjs'
 
 // Initialize Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -1201,18 +1202,21 @@ function StaticPage({ page, navTo }) {
 }
 
 function AdminPanelPage({ navTo, triggerToast }) {
-  const [session, setSession] = useState(null);
-  const [email, setEmail] = useState('');
+  const [session, setSession] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('inspire-admin-session')) } catch { return null }
+  });
+  const [usernameInput, setUsernameInput] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [busy, setBusy] = useState(false);
 
   // Forgot Password States
   const [forgotMode, setForgotMode] = useState(false);
-  const [forgotStep, setForgotStep] = useState(1); // 1 = Email, 2 = OTP, 3 = Reset
-  const [emailInput, setEmailInput] = useState('');
+  const [forgotStep, setForgotStep] = useState(1); // 1 = Select Method, 2 = Enter OTP, 3 = Reset Password
+  const [recoveryMethod, setRecoveryMethod] = useState('primary_email');
   const [otpInput, setOtpInput] = useState('');
   const [newPassInput, setNewPassInput] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
   const [forgotError, setForgotError] = useState('');
 
@@ -1229,23 +1233,22 @@ function AdminPanelPage({ navTo, triggerToast }) {
   const [newFallbackKey, setNewFallbackKey] = useState('');
 
   // Profile management states
+  const [profile, setProfile] = useState({
+    username: '',
+    primaryEmail: '',
+    recoveryEmail: '',
+    primaryPhone: '',
+    recoveryPhone: ''
+  });
+  
+  const [editUsername, setEditUsername] = useState('');
+  const [editPrimaryEmail, setEditPrimaryEmail] = useState('');
+  const [editRecoveryEmail, setEditRecoveryEmail] = useState('');
+  const [editPrimaryPhone, setEditPrimaryPhone] = useState('');
+  const [editRecoveryPhone, setEditRecoveryPhone] = useState('');
   const [newProfilePassword, setNewProfilePassword] = useState('');
-  const [newEmail, setNewEmail] = useState('');
 
-  // Fetch current session on mount
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Fetch current configuration
+  // Fetch configuration
   const fetchConfig = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -1264,31 +1267,75 @@ function AdminPanelPage({ navTo, triggerToast }) {
         });
       }
     } catch (err) {
-      console.error('Error fetching config:', err.message);
-      triggerToast('Error fetching configurations from database. Make sure setup-supabase.sql was executed.');
+      console.error(err);
+      triggerToast('Error loading config. Ensure setup-supabase.sql was run.');
     }
   }, [triggerToast]);
+
+  // Fetch admin profile
+  const fetchProfile = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('admin_profile')
+        .select('*')
+        .eq('id', 'profile')
+        .single();
+      
+      if (error) throw error;
+      if (data) {
+        const loaded = {
+          username: data.username || '',
+          primaryEmail: data.primary_email || '',
+          recoveryEmail: data.recovery_email || '',
+          primaryPhone: data.primary_phone || '',
+          recoveryPhone: data.recovery_phone || ''
+        };
+        setProfile(loaded);
+        setEditUsername(loaded.username);
+        setEditPrimaryEmail(loaded.primaryEmail);
+        setEditRecoveryEmail(loaded.recoveryEmail);
+        setEditPrimaryPhone(loaded.primaryPhone);
+        setEditRecoveryPhone(loaded.recoveryPhone);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
 
   useEffect(() => {
     if (session) {
       fetchConfig();
+      fetchProfile();
     }
-  }, [session, fetchConfig]);
+  }, [session, fetchConfig, fetchProfile]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!email || !password) return;
+    if (!usernameInput || !password) return;
     setBusy(true);
     setLoginError('');
     try {
-      // Map username 'Sohel' to recovery email automatically for convenience
-      const loginEmail = email.trim().toLowerCase() === 'sohel' ? 'larsonsteve48@gmail.com' : email.trim();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password
+      // Authenticate via database function
+      const { data, error } = await supabase.rpc('admin_authenticate', {
+        input_username: usernameInput.trim()
       });
+
       if (error) throw error;
-      triggerToast('Logged in as administrator! 🔑');
+
+      if (data && data.success === true) {
+        // Compare password hash using client side bcrypt
+        const matched = bcrypt.compareSync(password, data.password_hash);
+        if (matched) {
+          const userSession = { username: usernameInput.trim(), authenticated: true };
+          localStorage.setItem('inspire-admin-session', JSON.stringify(userSession));
+          setSession(userSession);
+          triggerToast('Logged in as administrator! 🔑');
+        } else {
+          throw new Error('Invalid username or password.');
+        }
+      } else {
+        throw new Error('Invalid username or password.');
+      }
     } catch (err) {
       setLoginError(err.message || 'Login failed.');
     } finally {
@@ -1296,10 +1343,10 @@ function AdminPanelPage({ navTo, triggerToast }) {
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  const handleLogout = () => {
+    localStorage.removeItem('inspire-admin-session');
     setSession(null);
-    setEmail('');
+    setUsernameInput('');
     setPassword('');
     setForgotMode(false);
     setForgotStep(1);
@@ -1311,19 +1358,20 @@ function AdminPanelPage({ navTo, triggerToast }) {
   // Forgot password flows
   const triggerForgotPassword = async (e) => {
     e.preventDefault();
-    if (!emailInput) return;
     setBusy(true);
     setForgotError('');
     setForgotMessage('');
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(emailInput.trim(), {
-        redirectTo: window.location.origin // Redirect to app
+      const { data, error } = await supabase.rpc('request_recovery_otp', {
+        target_method: recoveryMethod
       });
       if (error) throw error;
-      setForgotMessage('Password reset link sent to your email. Check your inbox/spam folder.');
-      // Supabase resets password via email link or token. 
-      // If user uses OTP, we can verify with verifyOtp:
-      setForgotStep(2);
+      if (data && data.success === true) {
+        setForgotMessage(`Verification code sent to destination ending in: "${data.destination_masked}". (Debug OTP: ${data.otp_debug})`);
+        setForgotStep(2);
+      } else {
+        throw new Error(data.error || 'Failed to request OTP');
+      }
     } catch (err) {
       setForgotError(err.message);
     } finally {
@@ -1338,13 +1386,18 @@ function AdminPanelPage({ navTo, triggerToast }) {
     setForgotError('');
     setForgotMessage('');
     try {
-      const { error } = await supabase.auth.verifyOtp({
-        email: emailInput.trim(),
-        token: otpInput.trim(),
-        type: 'recovery'
+      const { data, error } = await supabase.rpc('verify_recovery_otp', {
+        target_method: recoveryMethod,
+        entered_otp: otpInput.trim()
       });
       if (error) throw error;
-      setForgotStep(3);
+      if (data && data.success === true) {
+        setResetToken(data.reset_token);
+        setForgotStep(3);
+        setForgotMessage('OTP verified! Enter your new password below.');
+      } else {
+        throw new Error(data.error || 'Verification failed');
+      }
     } catch (err) {
       setForgotError(err.message);
     } finally {
@@ -1359,16 +1412,23 @@ function AdminPanelPage({ navTo, triggerToast }) {
     setForgotError('');
     setForgotMessage('');
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassInput
+      const hashed = bcrypt.hashSync(newPassInput, 10);
+      const { data, error } = await supabase.rpc('reset_admin_password', {
+        reset_secret: resetToken,
+        new_password_hash: hashed
       });
+
       if (error) throw error;
-      triggerToast('Password reset successfully! 🔑');
-      setForgotMode(false);
-      setForgotStep(1);
-      setEmailInput('');
-      setOtpInput('');
-      setNewPassInput('');
+      if (data && data.success === true) {
+        triggerToast('Password reset successfully! 🔑');
+        setForgotMode(false);
+        setForgotStep(1);
+        setOtpInput('');
+        setNewPassInput('');
+        setResetToken('');
+      } else {
+        throw new Error(data.error || 'Reset failed');
+      }
     } catch (err) {
       setForgotError(err.message);
     } finally {
@@ -1429,22 +1489,31 @@ function AdminPanelPage({ navTo, triggerToast }) {
   // Profile save handler
   const saveProfile = async (e) => {
     e.preventDefault();
-    if (!newProfilePassword && !newEmail) {
-      triggerToast('No fields changed.');
-      return;
-    }
     setBusy(true);
     try {
-      const updates = {};
-      if (newEmail) updates.email = newEmail.trim();
-      if (newProfilePassword) updates.password = newProfilePassword;
+      const updates = {
+        id: 'profile',
+        username: editUsername.trim() || profile.username,
+        primary_email: editPrimaryEmail.trim() || profile.primaryEmail,
+        recovery_email: editRecoveryEmail.trim(),
+        primary_phone: editPrimaryPhone.trim(),
+        recovery_phone: editRecoveryPhone.trim(),
+        updated_at: new Date().toISOString()
+      };
 
-      const { error } = await supabase.auth.updateUser(updates);
+      if (newProfilePassword) {
+        updates.password_hash = bcrypt.hashSync(newProfilePassword, 10);
+      }
+
+      const { error } = await supabase
+        .from('admin_profile')
+        .upsert(updates);
+
       if (error) throw error;
 
       triggerToast('Profile updated successfully! 👤');
       setNewProfilePassword('');
-      setNewEmail('');
+      fetchProfile();
     } catch (err) {
       alert(err.message);
     } finally {
@@ -1488,17 +1557,17 @@ function AdminPanelPage({ navTo, triggerToast }) {
       <div className="static-page">
         <div className="static-card admin-auth-card">
           <h1>🔐 Admin Portal</h1>
-          <p>Login to securely configure API keys, models, and security settings on your database.</p>
+          <p>Login to securely configure API keys, models, and recovery settings on your database.</p>
 
           {!forgotMode ? (
             <form onSubmit={handleLogin} className="admin-form">
               <div className="form-group">
-                <label>Email or Username</label>
+                <label>Admin Username</label>
                 <input
                   type="text"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="Enter email or Sohel"
+                  value={usernameInput}
+                  onChange={e => setUsernameInput(e.target.value)}
+                  placeholder="Enter admin username (e.g. Sohel)"
                   required
                 />
               </div>
@@ -1538,20 +1607,24 @@ function AdminPanelPage({ navTo, triggerToast }) {
 
               {forgotStep === 1 && (
                 <form onSubmit={triggerForgotPassword} className="admin-form">
-                  <p className="step-note">Enter your email address (`larsonsteve48@gmail.com`) to receive a reset code.</p>
+                  <p className="step-note">Select your preferred destination channel to receive a 6-digit verification OTP.</p>
+                  
                   <div className="form-group">
-                    <label>Recovery Email</label>
-                    <input
-                      type="email"
-                      value={emailInput}
-                      onChange={e => setEmailInput(e.target.value)}
-                      placeholder="e.g. name@domain.com"
-                      required
-                    />
+                    <label>Select Recovery Option</label>
+                    <select
+                      value={recoveryMethod}
+                      onChange={e => setRecoveryMethod(e.target.value)}
+                    >
+                      <option value="primary_email">Primary Email (larsonsteve48@gmail.com)</option>
+                      <option value="backup_email">Backup Email</option>
+                      <option value="primary_phone">Primary Phone (9026053036)</option>
+                      <option value="backup_phone">Backup Phone Number</option>
+                    </select>
                   </div>
+                  
                   <div className="form-actions">
                     <button type="submit" className="cta-btn" disabled={busy}>
-                      {busy ? 'Sending...' : 'Request Reset Email'}
+                      {busy ? 'Requesting...' : 'Request Verification OTP'}
                     </button>
                     <button type="button" className="cta-btn cta-secondary" onClick={() => setForgotMode(false)}>
                       Back to Login
@@ -1562,9 +1635,9 @@ function AdminPanelPage({ navTo, triggerToast }) {
 
               {forgotStep === 2 && (
                 <form onSubmit={verifyOtp} className="admin-form">
-                  <p className="step-note">Enter the 6-digit verification code sent to your email to verify reset access.</p>
+                  <p className="step-note">A 6-digit OTP code has been logged. Enter it below to authorize credential resetting.</p>
                   <div className="form-group">
-                    <label>Enter Email OTP Code</label>
+                    <label>Enter 6-Digit OTP</label>
                     <input
                       type="text"
                       maxLength={6}
@@ -1743,15 +1816,55 @@ function AdminPanelPage({ navTo, triggerToast }) {
             <div className="dash-card">
               <h2>👤 Profile & Security</h2>
               <form onSubmit={saveProfile} className="admin-form">
-                <p className="step-note">Change your recovery email or account password. Leave fields blank to keep them unchanged.</p>
+                <p className="step-note">Change your recovery details or account credentials. Leave fields blank to keep them unchanged.</p>
 
                 <div className="form-group">
-                  <label>Change Recovery Email</label>
+                  <label>Change Username</label>
+                  <input
+                    type="text"
+                    value={editUsername}
+                    onChange={e => setEditUsername(e.target.value)}
+                    placeholder="Enter new username"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Primary Email</label>
                   <input
                     type="email"
-                    value={newEmail}
-                    onChange={e => setNewEmail(e.target.value)}
-                    placeholder="Enter new recovery email"
+                    value={editPrimaryEmail}
+                    onChange={e => setEditPrimaryEmail(e.target.value)}
+                    placeholder="Enter primary email"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Backup Email</label>
+                  <input
+                    type="email"
+                    value={editRecoveryEmail}
+                    onChange={e => setEditRecoveryEmail(e.target.value)}
+                    placeholder="Enter backup email"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Primary Phone</label>
+                  <input
+                    type="text"
+                    value={editPrimaryPhone}
+                    onChange={e => setEditPrimaryPhone(e.target.value)}
+                    placeholder="Enter primary phone number"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Backup Phone</label>
+                  <input
+                    type="text"
+                    value={editRecoveryPhone}
+                    onChange={e => setEditRecoveryPhone(e.target.value)}
+                    placeholder="Enter backup phone number"
                   />
                 </div>
 
