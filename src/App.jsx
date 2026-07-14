@@ -5,6 +5,8 @@ import { APP_NAME, APP_VERSION, APP_BUILD, RELEASES_PAGE, detectPlatform, platfo
 import { checkForUpdates } from './updateService'
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 // Initialize Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -226,9 +228,9 @@ function downloadQuoteImage(quote, label = 'Inspire') {
 
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [page, setPage] = useState(() => localStorage.getItem('inspire-page') || 'quotes')
-  const [tab, setTabState] = useState(() => localStorage.getItem('inspire-tab') || 'MOTIVATION')
-  const [index, setIndex] = useState(() => getSavedIndex(localStorage.getItem('inspire-tab') || 'MOTIVATION'))
+  const [page, setPage] = useState('home')
+  const [tab, setTabState] = useState('MOTIVATION')
+  const [index, setIndex] = useState(() => getSavedIndex('MOTIVATION'))
   const [favorites, dispatchFav] = useReducer(favReducer, [], () => {
     try { return JSON.parse(localStorage.getItem('inspire-favs') || '[]') } catch { return [] }
   })
@@ -253,7 +255,7 @@ export default function App() {
   const [aiSettings, setAiSettings] = useState(loadAiSettings)
   const [savedAiQuotes, setSavedAiQuotes] = useState(loadSavedAiQuotes)
   const [likedAiQuotes, setLikedAiQuotes] = useState(loadLikedAiQuotes)
-  const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(true)
+  const [mobileCategoriesOpen, setMobileCategoriesOpen] = useState(false)
   const categoryTapRef = useRef({ key: '', time: 0 })
   const [clickCount, setClickCount] = useState(0)
 
@@ -304,8 +306,6 @@ export default function App() {
 
   useEffect(() => { localStorage.setItem('inspire-favs', JSON.stringify(favorites)) }, [favorites])
   useEffect(() => { localStorage.setItem('inspire-dark', JSON.stringify(dark)) }, [dark])
-  useEffect(() => { localStorage.setItem('inspire-page', page) }, [page])
-  useEffect(() => { localStorage.setItem('inspire-tab', tab) }, [tab])
   useEffect(() => { localStorage.setItem('inspire-view', viewMode) }, [viewMode])
   useEffect(() => { localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(aiSettings)) }, [aiSettings])
   useEffect(() => { localStorage.setItem(AI_SAVED_KEY, JSON.stringify(savedAiQuotes)) }, [savedAiQuotes])
@@ -459,7 +459,7 @@ export default function App() {
     setTab('MOTIVATION')
     setIndexWrap(0, 'MOTIVATION')
     setListPage(0)
-    setMobileCategoriesOpen(true)
+    setMobileCategoriesOpen(false)
     document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'auto' })
   }
 
@@ -579,8 +579,9 @@ export default function App() {
 
               <div className="desktop-main-col">
                 <div className="mobile-category-shell">
-                  <button className="mobile-category-toggle" onClick={() => setMobileCategoriesOpen(v => !v)}>
-                    {categories[tab]?.emoji} {categories[tab]?.label || 'Categories'} {tab === 'LIKED' ? `(${favorites.length})` : ''}
+                  <button className="mobile-category-toggle" onClick={() => setMobileCategoriesOpen(v => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>{categories[tab]?.emoji} {categories[tab]?.label || 'Categories'} {tab === 'LIKED' ? `(${favorites.length})` : ''}</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: mobileCategoriesOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }}><polyline points="6 9 12 15 18 9"></polyline></svg>
                   </button>
                   {mobileCategoriesOpen && (
                     <div className="tabs mobile-only-tabs">
@@ -825,10 +826,17 @@ function parseAiQuotes(raw, max = 10) {
     .slice(0, max)
 }
 
-async function callAiResponse(prompt, mimeType = '', base64Data = '') {
+async function callAiResponse(prompt, mimeType = '', base64Data = '', history = []) {
   console.log(`[Supabase RPC] Invoking generate_ai_response`);
+  // Build a context string from history (last 6 messages)
+  const recentHistory = history.slice(-6);
+  const contextPrefix = recentHistory.length > 0
+    ? recentHistory.map(m => `${m.role === 'user' ? 'User' : 'Inspire AI'}: ${m.role === 'user' ? m.content : (m.type === 'quotes' ? m.quotes.map(q => q.text).join('; ') : m.content)}`).join('\n') + '\n\n'
+    : '';
+  const fullPrompt = contextPrefix ? `${contextPrefix}User: ${prompt}` : prompt;
+
   const { data, error } = await supabase.rpc('generate_ai_response', {
-    prompt,
+    prompt: fullPrompt,
     mime_type: mimeType,
     base64_data: base64Data
   });
@@ -844,21 +852,76 @@ async function callAiResponse(prompt, mimeType = '', base64Data = '') {
   return data.text;
 }
 
+// Markdown link renderer - opens links in new tab with copy option
+function MarkdownLink({ href, children }) {
+  const copy = () => {
+    navigator.clipboard.writeText(href).catch(() => {})
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+      <a href={href} target="_blank" rel="noopener noreferrer"
+        style={{ color: 'var(--primary-color, #667EEA)', textDecoration: 'underline', wordBreak: 'break-all' }}>
+        {children}
+      </a>
+      <button onClick={copy} title="Copy link" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--text-secondary)', fontSize: '0.75rem', lineHeight: 1 }}>
+        📋
+      </button>
+    </span>
+  )
+}
+
+const markdownComponents = {
+  a: MarkdownLink,
+  img: ({ src, alt }) => (
+    <img src={src} alt={alt || 'image'} style={{ maxWidth: '100%', height: 'auto', borderRadius: '10px', margin: '10px 0', display: 'block' }} />
+  ),
+  pre: ({ children }) => (
+    <pre style={{ background: 'rgba(0,0,0,0.06)', padding: '12px', borderRadius: '8px', overflowX: 'auto', fontSize: '0.875rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '8px 0' }}>
+      {children}
+    </pre>
+  ),
+  code: ({ inline, children }) => inline
+    ? <code style={{ background: 'rgba(0,0,0,0.07)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.875em', wordBreak: 'break-word' }}>{children}</code>
+    : <>{children}</>,
+  h1: ({ children }) => <h1 style={{ fontSize: '1.3rem', margin: '16px 0 8px', fontWeight: 700 }}>{children}</h1>,
+  h2: ({ children }) => <h2 style={{ fontSize: '1.15rem', margin: '14px 0 6px', fontWeight: 700 }}>{children}</h2>,
+  h3: ({ children }) => <h3 style={{ fontSize: '1.05rem', margin: '12px 0 4px', fontWeight: 600 }}>{children}</h3>,
+  ul: ({ children }) => <ul style={{ paddingLeft: '20px', margin: '8px 0' }}>{children}</ul>,
+  ol: ({ children }) => <ol style={{ paddingLeft: '20px', margin: '8px 0' }}>{children}</ol>,
+  li: ({ children }) => <li style={{ marginBottom: '4px', lineHeight: 1.6 }}>{children}</li>,
+  p: ({ children }) => <p style={{ margin: '6px 0', lineHeight: 1.7, wordBreak: 'break-word' }}>{children}</p>,
+  strong: ({ children }) => <strong style={{ fontWeight: 700 }}>{children}</strong>,
+  blockquote: ({ children }) => (
+    <blockquote style={{ borderLeft: '3px solid var(--primary-color, #667EEA)', paddingLeft: '12px', margin: '10px 0', opacity: 0.85, fontStyle: 'italic' }}>
+      {children}
+    </blockquote>
+  ),
+  table: ({ children }) => (
+    <div style={{ overflowX: 'auto', margin: '10px 0' }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.9rem' }}>{children}</table>
+    </div>
+  ),
+  th: ({ children }) => <th style={{ border: '1px solid var(--static-border)', padding: '8px 12px', background: 'rgba(0,0,0,0.05)', textAlign: 'left' }}>{children}</th>,
+  td: ({ children }) => <td style={{ border: '1px solid var(--static-border)', padding: '8px 12px' }}>{children}</td>,
+}
+
 function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerToast }) {
   const [prompt, setPrompt] = useState('')
   const [attachedFile, setAttachedFile] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [resultType, setResultType] = useState('quotes') // 'quotes' | 'text'
-  const [textResult, setTextResult] = useState('')
-  const [quotesResult, setQuotesResult] = useState([])
+  const [chatHistory, setChatHistory] = useState([]) // [{role, content, type, quotes, file}]
+  const chatEndRef = useRef(null)
+  const inputRef = useRef(null)
+
+  // Auto-scroll to bottom when new message arrives
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatHistory, busy])
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (!file) {
-      setAttachedFile(null);
-      return;
-    }
+    if (!file) { setAttachedFile(null); return; }
     const reader = new FileReader();
     reader.onloadend = () => {
       setAttachedFile({
@@ -871,148 +934,262 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
     reader.readAsDataURL(file);
   };
 
-  const clearAttachedFile = () => {
-    setAttachedFile(null);
-  };
+  const clearAttachedFile = () => setAttachedFile(null);
 
   const generate = async () => {
-    setBusy(true)
-    setError('')
-    setTextResult('')
-    setQuotesResult([])
+    if (busy) return;
+    const trimmedPrompt = prompt.trim();
+    const isPromptEmpty = trimmedPrompt === '' && !attachedFile;
+    setBusy(true);
+    setError('');
+
+    // Add user message to history (if they typed something or attached a file)
+    let userMsg = null;
+    if (!isPromptEmpty) {
+      userMsg = {
+        id: Date.now(),
+        role: 'user',
+        content: trimmedPrompt || `[Attached: ${attachedFile?.name}]`,
+        file: attachedFile ? { name: attachedFile.name, previewUrl: attachedFile.previewUrl, type: attachedFile.type } : null,
+        ts: new Date()
+      };
+      setChatHistory(prev => [...prev, userMsg]);
+    }
+
+    setPrompt('');
+    setAttachedFile(null);
+    inputRef.current?.focus();
 
     try {
-      const isPromptEmpty = prompt.trim() === '';
+      const historyForContext = chatHistory.slice(-8);
       const responseText = await callAiResponse(
-        prompt, 
-        attachedFile?.type || '', 
-        attachedFile?.base64 || ''
+        isPromptEmpty ? '' : trimmedPrompt,
+        attachedFile?.type || '',
+        attachedFile?.base64 || '',
+        historyForContext
       );
 
       if (isPromptEmpty) {
-        // Fallback mode: parse 5 motivational quotes from text
-        setResultType('quotes');
+        // Quote generation mode
         const parsed = parseAiQuotes(responseText, 5).map(text => ({
-          text,
+          text: String(text || '').trim(),
           author: 'Inspire AI',
           category: 'MOTIVATION'
-        }));
-        setQuotesResult(parsed);
+        })).filter(q => q.text.length > 5);
+        setChatHistory(prev => [...prev, {
+          id: Date.now() + 1,
+          role: 'assistant',
+          type: 'quotes',
+          quotes: parsed,
+          ts: new Date()
+        }]);
       } else {
-        // Full AI response mode
-        setResultType('text');
-        setTextResult(responseText);
+        // Chat response mode
+        setChatHistory(prev => [...prev, {
+          id: Date.now() + 1,
+          role: 'assistant',
+          type: 'text',
+          content: String(responseText || '').trim(),
+          ts: new Date()
+        }]);
       }
     } catch (e) {
-      setError(e.message || 'AI generation failed');
+      setError(e.message || 'Something went wrong. Please try again.');
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   const copy = (text) => {
-    copyText(text).then(ok => {
-      if (ok) triggerToast('Copied to clipboard! 📋')
-    })
+    copyText(text).then(ok => { if (ok) triggerToast('Copied! 📋') })
   }
 
   const saveItem = (text, author = 'Inspire AI') => {
-    const exists = savedQuotes.some(q => q.text === text)
-    if (exists) {
-      triggerToast('Already saved! 💾')
-      return
-    }
+    if (savedQuotes.some(q => q.text === text)) { triggerToast('Already saved! 💾'); return; }
     setSavedQuotes(prev => [{ text, author, savedAt: new Date().toISOString() }, ...prev])
-    triggerToast('Saved successfully! 💾')
+    triggerToast('Saved! 💾')
   }
 
+  const clearChat = () => { setChatHistory([]); setError(''); }
+
   return (
-    <div className="static-page">
-      <div className="static-card static-wide ai-page" style={{ maxWidth: '800px', margin: '0 auto' }}>
-        <h1>🤖 Inspire AI Assistant</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: '1.6', marginBottom: '30px' }}>
-          Welcome to your personal AI companion! Type any question, paste text, or attach files (images, PDFs, documents) to get instant intelligent responses. Not sure what to ask? Just hit the send button with an empty box to discover deeply profound motivational quotes.
-        </p>
-
-        <section className="ai-section inspire-ai-section" style={{ position: 'relative', marginTop: '20px', marginBottom: '40px' }}>
-          
-          <div className="pill-input-container" style={{ display: 'flex', alignItems: 'center', background: 'var(--surface-color, #ffffff)', padding: '8px 16px', borderRadius: '50px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: '1px solid var(--static-border, #e2e8f0)', position: 'relative', zIndex: 10 }}>
-            
-            <label className="icon-btn" style={{ background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s', margin: 0, padding: 0 }}>
-              <input type="file" accept="image/*,application/pdf,text/*,audio/*,video/*" onChange={handleFileChange} style={{ display: 'none' }} />
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-            </label>
-
-            <input
-              type="text"
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') generate(); }}
-              placeholder="Ask Inspire..."
-              style={{ flex: 1, border: 'none', background: 'transparent', padding: '0 16px', fontSize: '1.05rem', outline: 'none', color: 'var(--text-primary)' }}
-            />
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button type="button" onClick={generate} disabled={busy} style={{ background: 'var(--primary-color, #667EEA)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>
-                {busy ? <span className="spinner" style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></span> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>}
-              </button>
+    <div className="ai-chat-page">
+      {/* Header */}
+      <div className="ai-chat-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '1.5rem' }}>✨</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>Inspire AI</div>
+            <div style={{ fontSize: '0.75rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }}></span>
+              Online
             </div>
           </div>
+        </div>
+        {chatHistory.length > 0 && (
+          <button onClick={clearChat} style={{ background: 'none', border: '1px solid var(--static-border)', borderRadius: '8px', padding: '5px 10px', fontSize: '0.78rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+            🗑️ Clear Chat
+          </button>
+        )}
+      </div>
 
-          {attachedFile && (
-            <div className="attachment-preview-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'var(--surface-color, #ffffff)', padding: '6px 14px', borderRadius: '20px', border: '1px solid var(--static-border, #e2e8f0)', marginTop: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-              {attachedFile.previewUrl ? (
-                <img src={attachedFile.previewUrl} alt="Preview" style={{ width: '24px', height: '24px', borderRadius: '4px', objectFit: 'cover' }} />
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-              )}
-              <span style={{ fontSize: '0.85rem', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{attachedFile.name}</span>
-              <button type="button" onClick={clearAttachedFile} style={{ background: 'none', border: 'none', padding: '0', cursor: 'pointer', color: 'var(--text-secondary)', marginLeft: '4px' }}>✕</button>
+      {/* Chat Messages Area */}
+      <div className="ai-chat-messages">
+        {chatHistory.length === 0 && (
+          <div className="ai-chat-empty">
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>✨</div>
+            <div style={{ fontWeight: 600, fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '8px' }}>Your Personal AI Companion</div>
+            <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              Ask me anything, share images or files, or just hit <strong>Send</strong> for motivational quotes!
             </div>
-          )}
+            <div className="ai-chat-suggestions">
+              {['Give me 5 quotes on success', 'Write a motivational poem', 'What is the meaning of life?'].map((s, i) => (
+                <button key={i} onClick={() => { setPrompt(s); inputRef.current?.focus(); }}
+                  style={{ background: 'var(--surface-color)', border: '1px solid var(--static-border)', borderRadius: '20px', padding: '8px 16px', fontSize: '0.82rem', cursor: 'pointer', color: 'var(--text-secondary)', transition: 'all 0.2s' }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-          {error && <p className="ai-error" style={{ color: '#FC8181', marginTop: '16px', fontSize: '0.95rem', textAlign: 'center' }}>{error}</p>}
-        </section>
+        {chatHistory.map((msg) => (
+          <div key={msg.id} className={`ai-chat-bubble-wrap ${msg.role}`}>
+            {msg.role === 'assistant' && (
+              <div className="ai-chat-avatar">✨</div>
+            )}
+            <div className={`ai-chat-bubble ${msg.role}`}>
+              {/* User message */}
+              {msg.role === 'user' && (
+                <>
+                  {msg.file && (
+                    <div style={{ marginBottom: '6px' }}>
+                      {msg.file.previewUrl ? (
+                        <img src={msg.file.previewUrl} alt="attachment" style={{ maxWidth: '180px', maxHeight: '150px', borderRadius: '8px', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.15)', padding: '6px 10px', borderRadius: '8px', fontSize: '0.8rem' }}>
+                          📄 {msg.file.name}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {msg.content && <span>{msg.content}</span>}
+                </>
+              )}
 
-        {/* Results Container */}
-        {(textResult || quotesResult.length > 0) && (
-          <section className="ai-results-section" style={{ marginTop: '24px', textAlign: 'left' }}>
-            <h2 style={{ fontSize: '1.15rem', marginBottom: '14px' }}>✨ Inspire AI Response</h2>
+              {/* AI text response */}
+              {msg.role === 'assistant' && msg.type === 'text' && (
+                <>
+                  <div className="ai-markdown-content">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                      {msg.content || ''}
+                    </ReactMarkdown>
+                  </div>
+                  <div className="ai-bubble-actions">
+                    <button onClick={() => copy(msg.content)} title="Copy">📋 Copy</button>
+                    <button onClick={() => saveItem(msg.content)} title="Save">💾 Save</button>
+                  </div>
+                </>
+              )}
 
-            {resultType === 'text' ? (
-              <div className="text-response-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '20px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
-                <div className="markdown-body" style={{ fontSize: '0.95rem', margin: '0 0 16px 0', lineHeight: '1.6', color: 'var(--text-primary)' }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{textResult}</ReactMarkdown>
-                </div>
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                  <button className="cta-btn cta-secondary" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => copy(textResult)}>📋 Copy Response</button>
-                  <button className="cta-btn" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => saveItem(textResult, 'Inspire AI')}>💾 Save Response</button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {quotesResult.map((quote, i) => {
-                  const liked = favorites.includes(quote.text)
-                  return (
-                    <article key={i} className="ai-quote-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
-                      <p style={{ fontSize: '1rem', margin: '0 0 12px 0' }}>{quote.text}</p>
-                      <small style={{ color: 'var(--text-secondary)' }}>— Inspire AI</small>
-                      <div className="ai-actions" style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
-                        <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => onFav(quote)}>{liked ? '❤️ Liked' : '🤍 Like'}</button>
-                        <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => saveItem(quote.text)}>Save</button>
-                        <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => copy(quote.text)}>Copy</button>
+              {/* AI quotes response */}
+              {msg.role === 'assistant' && msg.type === 'quotes' && (
+                <div className="ai-quotes-list">
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '10px', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>✨ Inspirational Quotes</div>
+                  {(msg.quotes || []).map((q, i) => {
+                    const liked = favorites.includes(q.text)
+                    return (
+                      <div key={i} className="ai-quote-item">
+                        <p className="ai-quote-text">"{q.text}"</p>
+                        <div className="ai-quote-footer">
+                          <small>— Inspire AI</small>
+                          <div className="ai-quote-btns">
+                            <button onClick={() => onFav(q)} className={liked ? 'active' : ''}>
+                              {liked ? '❤️' : '🤍'}
+                            </button>
+                            <button onClick={() => saveItem(q.text)}>💾</button>
+                            <button onClick={() => copy(q.text)}>📋</button>
+                          </div>
+                        </div>
                       </div>
-                    </article>
-                  )
-                })}
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            {msg.role === 'user' && (
+              <div className="ai-chat-user-avatar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
               </div>
             )}
-          </section>
+          </div>
+        ))}
+
+        {/* Typing indicator */}
+        {busy && (
+          <div className="ai-chat-bubble-wrap assistant">
+            <div className="ai-chat-avatar">✨</div>
+            <div className="ai-chat-bubble assistant ai-typing-bubble">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
         )}
+
+        {/* Error */}
+        {error && (
+          <div className="ai-chat-error">
+            ⚠️ {error}
+            <button onClick={() => setError('')} style={{ marginLeft: '8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
+          </div>
+        )}
+
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* Input Area */}
+      <div className="ai-chat-input-area">
+        {attachedFile && (
+          <div className="ai-attached-preview">
+            {attachedFile.previewUrl
+              ? <img src={attachedFile.previewUrl} alt="preview" style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
+              : <span style={{ fontSize: '1.2rem' }}>📄</span>
+            }
+            <span style={{ fontSize: '0.8rem', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachedFile.name}</span>
+            <button onClick={clearAttachedFile} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', color: '#fc8181', padding: 0, lineHeight: 1 }}>✕</button>
+          </div>
+        )}
+        <div className="ai-input-row">
+          <label className="ai-attach-btn" title="Attach file">
+            <input type="file" accept="image/*,application/pdf,text/*,audio/*,video/*" onChange={handleFileChange} style={{ display: 'none' }} />
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+          </label>
+          <input
+            ref={inputRef}
+            type="text"
+            value={prompt}
+            onChange={e => setPrompt(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(); } }}
+            placeholder="Ask Inspire AI..."
+            className="ai-text-input"
+            disabled={busy}
+          />
+          <button onClick={generate} disabled={busy} className="ai-send-btn" aria-label="Send">
+            {busy
+              ? <span className="ai-spinner"></span>
+              : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            }
+          </button>
+        </div>
+        <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '6px', opacity: 0.7 }}>
+          Send empty to generate quotes · Enter to send
+        </div>
       </div>
     </div>
   )
 }
+
+
+
 
 function SavedQuotesPage({ quotes, setQuotes, onFav, favorites, triggerToast }) {
   const copy = (text) => {
