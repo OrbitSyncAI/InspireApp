@@ -6,18 +6,19 @@ create extension if not exists http;
 -- ========================================================
 create table if not exists public.api_config (
     id text primary key default 'config',
-    gemini_api_1_key text default '',
-    gemini_api_1_model text default 'gemini-1.5-flash',
-    gemini_api_2_key text default '',
-    gemini_api_2_model text default 'gemini-1.5-flash',
-    gemini_api_3_key text default '',
-    gemini_api_3_model text default 'gemini-1.5-flash',
-    gemini_api_4_key text default '',
-    gemini_api_4_model text default 'gemini-1.5-flash',
-    gemini_api_5_key text default '',
-    gemini_api_5_model text default 'gemini-1.5-flash',
     updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_1_key text default '';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_1_model text default 'gemini-1.5-flash';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_2_key text default '';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_2_model text default 'gemini-1.5-flash';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_3_key text default '';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_3_model text default 'gemini-1.5-flash';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_4_key text default '';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_4_model text default 'gemini-1.5-flash';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_5_key text default '';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_5_model text default 'gemini-1.5-flash';
 
 -- ========================================================
 -- Admin Profile Table
