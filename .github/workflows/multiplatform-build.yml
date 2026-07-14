@@ -398,7 +398,7 @@ jobs:
           if [ ! -f capacitor.config.json ] && [ ! -f capacitor.config.ts ]; then
             npx cap init "InspireApp" "ai.orbitsync.inspireapp" --web-dir dist
           fi
-          npx cap add android
+          npx cap add android || true
           npx cap sync android
 
       - name: Add Android in-app updater bridge
@@ -603,7 +603,7 @@ jobs:
             npx cap init "InspireApp" "ai.orbitsync.inspireapp" --web-dir dist
           fi
           node -e "const fs=require('fs');const p='capacitor.config.json';const c=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):{};c.appId='ai.orbitsync.inspireapp';c.appName='InspireApp';c.webDir='dist';c.ios={contentInset:'automatic',scrollEnabled:true,allowsLinkPreview:false};fs.writeFileSync(p,JSON.stringify(c,null,2));"
-          npx cap add ios
+          npx cap add ios || true
           npx cap sync ios
 
       - name: Select Xcode
