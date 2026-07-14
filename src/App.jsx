@@ -16,7 +16,7 @@ const AI_SETTINGS_KEY = 'inspire-ai-settings'
 const AI_SAVED_KEY = 'inspire-ai-saved-quotes'
 const AI_LIKED_KEY = 'inspire-ai-liked-quotes'
 const AI_PROVIDERS = {
-  gemini: { label: 'Gemini', defaultModel: 'gemini-3.1-flash-lite', models: ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'] },
+  gemini: { label: 'Gemini', defaultModel: 'gemini-3.1-flash-lite', models: ['gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-3.1-flash-lite', 'gemini-1.5-pro'] },
   openai: { label: 'ChatGPT', defaultModel: 'gpt-4o-mini', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1', 'o4-mini', 'o3-mini'] },
   claude: { label: 'Claude', defaultModel: 'claude-3-5-haiku-20241022', models: ['claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022', 'claude-3-7-sonnet-latest', 'claude-3-opus-20240229'] },
   groq: { label: 'Groq', defaultModel: 'llama-3.1-8b-instant', models: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'] },
@@ -467,7 +467,7 @@ export default function App() {
     { id: 'quotes', label: 'Home', emoji: '🏠' },
     { id: 'daily', label: 'Daily', emoji: '☀️' },
     { id: 'liked', label: 'Liked Quotes', emoji: '❤️' },
-    { id: 'ai', label: 'AI Quotes', emoji: '🤖' },
+    { id: 'ai', label: '✨ Gemini AI', emoji: '🤖' },
     { id: 'saved', label: 'Saved Quotes', emoji: '💾' },
     { id: 'about', label: 'About Us', emoji: 'ℹ️' },
     { id: 'contact', label: 'Contact', emoji: '📞' },
@@ -932,67 +932,74 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
         <h1>🤖 Gemini AI Assistant</h1>
         <p>Ask anything, attach files (images, documents, PDFs, videos, music), or leave empty to generate motivational quotes.</p>
 
-        <section className="ai-section" style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '14px', border: '1px solid var(--static-border)' }}>
-          <div className="form-group" style={{ marginBottom: '14px' }}>
-            <label>Ask Gemini Prompt</label>
+        <section className="ai-section premium-ai-section" style={{ background: 'linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01))', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+          <div className="form-group" style={{ marginBottom: '20px' }}>
             <textarea
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
               rows={4}
-              placeholder="What would you like to ask or generate? E.g., 'Explain Quantum Computing' or leave empty for motivational quotes..."
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.15)', border: '1px solid var(--static-border)', color: 'var(--text-primary)' }}
+              placeholder=""
+              style={{ width: '100%', padding: '16px', borderRadius: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', fontSize: '1rem', resize: 'vertical', outline: 'none', transition: 'border-color 0.3s' }}
+              onFocus={(e) => e.target.style.borderColor = 'rgba(102, 126, 234, 0.5)'}
+              onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
             />
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <label className="cta-btn cta-secondary" style={{ cursor: 'pointer', margin: 0, padding: '8px 16px', fontSize: '0.88rem' }}>
-                📎 Attach File
-                <input
-                  type="file"
-                  onChange={handleFileChange}
-                  style={{ display: 'none' }}
-                  accept="image/*,application/pdf,text/*,audio/*,video/*"
-                />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+            <div className="attachment-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' }}>
+              <label className="cta-btn cta-secondary attach-btn" style={{ cursor: 'pointer', margin: 0, padding: '10px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)' }}>
+                <span style={{ fontSize: '1.2rem' }}>📸</span>
+                Camera
+                <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} style={{ display: 'none' }} />
               </label>
-
-              {attachedFile && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--static-border)' }}>
-                  <span style={{ fontSize: '0.85rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {attachedFile.name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={clearAttachedFile}
-                    style={{ background: 'none', border: 'none', color: '#E53E3E', cursor: 'pointer', fontWeight: 'bold' }}
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
+              <label className="cta-btn cta-secondary attach-btn" style={{ cursor: 'pointer', margin: 0, padding: '10px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)' }}>
+                <span style={{ fontSize: '1.2rem' }}>🖼️</span>
+                Image
+                <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+              </label>
+              <label className="cta-btn cta-secondary attach-btn" style={{ cursor: 'pointer', margin: 0, padding: '10px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)' }}>
+                <span style={{ fontSize: '1.2rem' }}>📄</span>
+                Doc/PDF
+                <input type="file" accept="application/pdf,text/*,.doc,.docx" onChange={handleFileChange} style={{ display: 'none' }} />
+              </label>
+              <label className="cta-btn cta-secondary attach-btn" style={{ cursor: 'pointer', margin: 0, padding: '10px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)' }}>
+                <span style={{ fontSize: '1.2rem' }}>🎵</span>
+                Media
+                <input type="file" accept="audio/*,video/*" onChange={handleFileChange} style={{ display: 'none' }} />
+              </label>
             </div>
 
+            {attachedFile && (
+              <div className="attachment-preview" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(102, 126, 234, 0.1)', padding: '10px 16px', borderRadius: '10px', border: '1px solid rgba(102, 126, 234, 0.3)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                  <span style={{ fontSize: '1.2rem' }}>📎</span>
+                  <span style={{ fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#E2E8F0' }}>
+                    {attachedFile.name}
+                  </span>
+                </div>
+                <button type="button" onClick={clearAttachedFile} style={{ background: 'rgba(229, 62, 62, 0.2)', border: 'none', color: '#FC8181', cursor: 'pointer', fontWeight: 'bold', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}>
+                  ✕
+                </button>
+              </div>
+            )}
+
             {attachedFile?.previewUrl && (
-              <div style={{ marginTop: '10px' }}>
-                <img
-                  src={attachedFile.previewUrl}
-                  alt="Attachment Preview"
-                  style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', border: '1px solid var(--static-border)' }}
-                />
+              <div style={{ marginTop: '5px', alignSelf: 'center' }}>
+                <img src={attachedFile.previewUrl} alt="Attachment Preview" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', objectFit: 'contain' }} />
               </div>
             )}
           </div>
 
           <button
-            className="cta-btn"
+            className="cta-btn premium-generate-btn"
             disabled={busy}
             onClick={generate}
-            style={{ width: '100%', padding: '12px' }}
+            style={{ width: '100%', padding: '16px', fontSize: '1.1rem', fontWeight: 'bold', letterSpacing: '0.5px', background: 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 15px rgba(102, 126, 234, 0.4)', transition: 'all 0.3s' }}
           >
-            {busy ? 'Generating...' : 'Ask Gemini Assistant Now'}
+            {busy ? '✨ Generating...' : '✨ Ask Gemini Assistant Now'}
           </button>
 
-          {error && <p className="ai-error" style={{ color: '#E53E3E', marginTop: '12px', fontSize: '0.9rem' }}>{error}</p>}
+          {error && <p className="ai-error" style={{ color: '#FC8181', marginTop: '16px', fontSize: '0.95rem', background: 'rgba(229,62,62,0.1)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>{error}</p>}
         </section>
 
         {/* Results Container */}
@@ -1301,15 +1308,15 @@ function AdminPanelPage({ navTo, triggerToast }) {
   // 5-Slot Gemini Configurations
   const [config, setConfig] = useState({
     gemini_api_1_key: '',
-    gemini_api_1_model: 'gemini-1.5-flash',
+    gemini_api_1_model: 'gemini-3.1-flash-lite',
     gemini_api_2_key: '',
-    gemini_api_2_model: 'gemini-1.5-flash',
+    gemini_api_2_model: 'gemini-3.1-flash-lite',
     gemini_api_3_key: '',
-    gemini_api_3_model: 'gemini-1.5-flash',
+    gemini_api_3_model: 'gemini-3.1-flash-lite',
     gemini_api_4_key: '',
-    gemini_api_4_model: 'gemini-1.5-flash',
+    gemini_api_4_model: 'gemini-3.1-flash-lite',
     gemini_api_5_key: '',
-    gemini_api_5_model: 'gemini-1.5-flash'
+    gemini_api_5_model: 'gemini-3.1-flash-lite'
   });
 
   // Hide/Unhide toggles state for each slot
@@ -1334,15 +1341,15 @@ function AdminPanelPage({ navTo, triggerToast }) {
       if (data) {
         setConfig({
           gemini_api_1_key: data.gemini_api_1_key || '',
-          gemini_api_1_model: data.gemini_api_1_model || 'gemini-1.5-flash',
+          gemini_api_1_model: data.gemini_api_1_model || 'gemini-3.1-flash-lite',
           gemini_api_2_key: data.gemini_api_2_key || '',
-          gemini_api_2_model: data.gemini_api_2_model || 'gemini-1.5-flash',
+          gemini_api_2_model: data.gemini_api_2_model || 'gemini-3.1-flash-lite',
           gemini_api_3_key: data.gemini_api_3_key || '',
-          gemini_api_3_model: data.gemini_api_3_model || 'gemini-1.5-flash',
+          gemini_api_3_model: data.gemini_api_3_model || 'gemini-3.1-flash-lite',
           gemini_api_4_key: data.gemini_api_4_key || '',
-          gemini_api_4_model: data.gemini_api_4_model || 'gemini-1.5-flash',
+          gemini_api_4_model: data.gemini_api_4_model || 'gemini-3.1-flash-lite',
           gemini_api_5_key: data.gemini_api_5_key || '',
-          gemini_api_5_model: data.gemini_api_5_model || 'gemini-1.5-flash'
+          gemini_api_5_model: data.gemini_api_5_model || 'gemini-3.1-flash-lite'
         });
       }
     } catch (err) {
@@ -1564,7 +1571,7 @@ function AdminPanelPage({ navTo, triggerToast }) {
           <div className="slots-layout" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {[1, 2, 3, 4, 5].map(idx => {
               const keyVal = config[`gemini_api_${idx}_key`] || '';
-              const modelVal = config[`gemini_api_${idx}_model`] || 'gemini-1.5-flash';
+              const modelVal = config[`gemini_api_${idx}_model`] || 'gemini-3.1-flash-lite';
               const isConfigured = keyVal.trim() !== '';
 
               return (
@@ -1603,7 +1610,7 @@ function AdminPanelPage({ navTo, triggerToast }) {
                       type="text"
                       value={modelVal}
                       onChange={e => setConfig(prev => ({ ...prev, [`gemini_api_${idx}_model`]: e.target.value }))}
-                      placeholder="e.g. gemini-1.5-flash"
+                      placeholder="e.g. gemini-3.1-flash-lite"
                     />
                   </div>
 
