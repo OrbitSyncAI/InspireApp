@@ -3792,3 +3792,35 @@ button:active, .cta-btn:active, .nav-btn:active, .action-btn:active, .list-actio
     padding: 16px !important;
   }
 }
+
+
+/* Inspire AI Pill Chat UI */
+.inspire-ai-section {
+  position: relative;
+  z-index: 5;
+}
+.pill-input-container {
+  transition: box-shadow 0.3s, border-color 0.3s;
+}
+.pill-input-container:focus-within {
+  box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+  border-color: var(--primary-color, #667EEA);
+}
+.pill-input-container input::placeholder {
+  color: #a0aec0;
+  font-weight: 400;
+}
+.icon-btn:hover {
+  background: rgba(0,0,0,0.08) !important;
+}
+.attachment-dropdown-wrapper .dropdown-menu.show {
+  display: flex !important;
+  animation: slideUp 0.2s ease-out forwards;
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.dropdown-item:hover {
+  background: rgba(0,0,0,0.04);
+}

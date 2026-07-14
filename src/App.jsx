@@ -467,7 +467,7 @@ export default function App() {
     { id: 'quotes', label: 'Home', emoji: '🏠' },
     { id: 'daily', label: 'Daily', emoji: '☀️' },
     { id: 'liked', label: 'Liked Quotes', emoji: '❤️' },
-    { id: 'ai', label: '✨ Gemini AI', emoji: '🤖' },
+    { id: 'ai', label: '✨ Inspire AI', emoji: '🤖' },
     { id: 'saved', label: 'Saved Quotes', emoji: '💾' },
     { id: 'about', label: 'About Us', emoji: 'ℹ️' },
     { id: 'contact', label: 'Contact', emoji: '📞' },
@@ -894,7 +894,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
         setResultType('quotes');
         const parsed = parseAiQuotes(responseText, 5).map(text => ({
           text,
-          author: 'Gemini AI',
+          author: 'Inspire AI',
           category: 'MOTIVATION'
         }));
         setQuotesResult(parsed);
@@ -916,7 +916,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
     })
   }
 
-  const saveItem = (text, author = 'Gemini AI') => {
+  const saveItem = (text, author = 'Inspire AI') => {
     const exists = savedQuotes.some(q => q.text === text)
     if (exists) {
       triggerToast('Already saved! 💾')
@@ -929,83 +929,74 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
   return (
     <div className="static-page">
       <div className="static-card static-wide ai-page" style={{ maxWidth: '800px', margin: '0 auto' }}>
-        <h1>🤖 Gemini AI Assistant</h1>
+        <h1>🤖 Inspire AI Assistant</h1>
         <p>Ask anything, attach files (images, documents, PDFs, videos, music), or leave empty to generate motivational quotes.</p>
 
-        <section className="ai-section premium-ai-section" style={{ background: 'linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01))', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-          <div className="form-group" style={{ marginBottom: '20px' }}>
-            <textarea
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-              rows={4}
-              placeholder=""
-              style={{ width: '100%', padding: '16px', borderRadius: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', fontSize: '1rem', resize: 'vertical', outline: 'none', transition: 'border-color 0.3s' }}
-              onFocus={(e) => e.target.style.borderColor = 'rgba(102, 126, 234, 0.5)'}
-              onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-            <div className="attachment-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' }}>
-              <label className="cta-btn cta-secondary attach-btn" style={{ cursor: 'pointer', margin: 0, padding: '10px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)' }}>
-                <span style={{ fontSize: '1.2rem' }}>📸</span>
-                Camera
-                <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} style={{ display: 'none' }} />
-              </label>
-              <label className="cta-btn cta-secondary attach-btn" style={{ cursor: 'pointer', margin: 0, padding: '10px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)' }}>
-                <span style={{ fontSize: '1.2rem' }}>🖼️</span>
-                Image
-                <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-              </label>
-              <label className="cta-btn cta-secondary attach-btn" style={{ cursor: 'pointer', margin: 0, padding: '10px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)' }}>
-                <span style={{ fontSize: '1.2rem' }}>📄</span>
-                Doc/PDF
-                <input type="file" accept="application/pdf,text/*,.doc,.docx" onChange={handleFileChange} style={{ display: 'none' }} />
-              </label>
-              <label className="cta-btn cta-secondary attach-btn" style={{ cursor: 'pointer', margin: 0, padding: '10px', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)' }}>
-                <span style={{ fontSize: '1.2rem' }}>🎵</span>
-                Media
-                <input type="file" accept="audio/*,video/*" onChange={handleFileChange} style={{ display: 'none' }} />
-              </label>
+        <section className="ai-section inspire-ai-section" style={{ position: 'relative', marginTop: '20px', marginBottom: '40px' }}>
+          
+          <div className="pill-input-container" style={{ display: 'flex', alignItems: 'center', background: 'var(--surface-color, #ffffff)', padding: '8px 16px', borderRadius: '50px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: '1px solid var(--static-border, #e2e8f0)', position: 'relative', zIndex: 10 }}>
+            
+            <div className="attachment-dropdown-wrapper" style={{ position: 'relative' }}>
+              <button type="button" className="icon-btn" onClick={() => document.getElementById('attach-menu').classList.toggle('show')} style={{ background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+              </button>
+              
+              <div id="attach-menu" className="dropdown-menu" style={{ position: 'absolute', bottom: '120%', left: '0', background: 'var(--surface-color, #ffffff)', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.15)', padding: '12px', display: 'none', flexDirection: 'column', gap: '8px', minWidth: '180px', border: '1px solid var(--static-border, #e2e8f0)' }}>
+                <label className="dropdown-item" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '1.2rem' }}>📸</span> Camera
+                  <input type="file" accept="image/*" capture="environment" onChange={(e) => { handleFileChange(e); document.getElementById('attach-menu').classList.remove('show'); }} style={{ display: 'none' }} />
+                </label>
+                <label className="dropdown-item" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '1.2rem' }}>🖼️</span> Upload files
+                  <input type="file" accept="image/*,application/pdf,text/*,audio/*,video/*" onChange={(e) => { handleFileChange(e); document.getElementById('attach-menu').classList.remove('show'); }} style={{ display: 'none' }} />
+                </label>
+              </div>
             </div>
 
-            {attachedFile && (
-              <div className="attachment-preview" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(102, 126, 234, 0.1)', padding: '10px 16px', borderRadius: '10px', border: '1px solid rgba(102, 126, 234, 0.3)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-                  <span style={{ fontSize: '1.2rem' }}>📎</span>
-                  <span style={{ fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#E2E8F0' }}>
-                    {attachedFile.name}
-                  </span>
-                </div>
-                <button type="button" onClick={clearAttachedFile} style={{ background: 'rgba(229, 62, 62, 0.2)', border: 'none', color: '#FC8181', cursor: 'pointer', fontWeight: 'bold', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}>
-                  ✕
-                </button>
-              </div>
-            )}
+            <input
+              type="text"
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') generate(); }}
+              placeholder="Ask Inspire..."
+              style={{ flex: 1, border: 'none', background: 'transparent', padding: '0 16px', fontSize: '1.05rem', outline: 'none', color: 'var(--text-primary)' }}
+            />
 
-            {attachedFile?.previewUrl && (
-              <div style={{ marginTop: '5px', alignSelf: 'center' }}>
-                <img src={attachedFile.previewUrl} alt="Attachment Preview" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', objectFit: 'contain' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="model-selector" style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', padding: '6px 12px', borderRadius: '20px', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500' }}>
+                Flash
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
               </div>
-            )}
+              <button type="button" className="icon-btn" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '6px' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+              </button>
+              {(prompt.trim() !== '' || attachedFile || quotesResult.length === 0) && (
+                <button type="button" onClick={generate} disabled={busy} style={{ background: 'var(--primary-color, #667EEA)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>
+                  {busy ? <span className="spinner" style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></span> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>}
+                </button>
+              )}
+            </div>
           </div>
 
-          <button
-            className="cta-btn premium-generate-btn"
-            disabled={busy}
-            onClick={generate}
-            style={{ width: '100%', padding: '16px', fontSize: '1.1rem', fontWeight: 'bold', letterSpacing: '0.5px', background: 'linear-gradient(135deg, #667EEA 0%, #764BA2 100%)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 15px rgba(102, 126, 234, 0.4)', transition: 'all 0.3s' }}
-          >
-            {busy ? '✨ Generating...' : '✨ Ask Gemini Assistant Now'}
-          </button>
+          {attachedFile && (
+            <div className="attachment-preview-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'var(--surface-color, #ffffff)', padding: '6px 14px', borderRadius: '20px', border: '1px solid var(--static-border, #e2e8f0)', marginTop: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+              {attachedFile.previewUrl ? (
+                <img src={attachedFile.previewUrl} alt="Preview" style={{ width: '24px', height: '24px', borderRadius: '4px', objectFit: 'cover' }} />
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+              )}
+              <span style={{ fontSize: '0.85rem', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{attachedFile.name}</span>
+              <button type="button" onClick={clearAttachedFile} style={{ background: 'none', border: 'none', padding: '0', cursor: 'pointer', color: 'var(--text-secondary)', marginLeft: '4px' }}>✕</button>
+            </div>
+          )}
 
-          {error && <p className="ai-error" style={{ color: '#FC8181', marginTop: '16px', fontSize: '0.95rem', background: 'rgba(229,62,62,0.1)', padding: '10px', borderRadius: '8px', textAlign: 'center' }}>{error}</p>}
+          {error && <p className="ai-error" style={{ color: '#FC8181', marginTop: '16px', fontSize: '0.95rem', textAlign: 'center' }}>{error}</p>}
         </section>
 
         {/* Results Container */}
         {(textResult || quotesResult.length > 0) && (
           <section className="ai-results-section" style={{ marginTop: '24px', textAlign: 'left' }}>
-            <h2 style={{ fontSize: '1.15rem', marginBottom: '14px' }}>✨ Gemini Response</h2>
+            <h2 style={{ fontSize: '1.15rem', marginBottom: '14px' }}>✨ Inspire AI Response</h2>
 
             {resultType === 'text' ? (
               <div className="text-response-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '20px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
@@ -1014,7 +1005,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
                 </pre>
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                   <button className="cta-btn cta-secondary" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => copy(textResult)}>📋 Copy Response</button>
-                  <button className="cta-btn" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => saveItem(textResult, 'Gemini AI')}>💾 Save Response</button>
+                  <button className="cta-btn" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => saveItem(textResult, 'Inspire AI')}>💾 Save Response</button>
                 </div>
               </div>
             ) : (
@@ -1024,7 +1015,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
                   return (
                     <article key={i} className="ai-quote-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
                       <p style={{ fontSize: '1rem', margin: '0 0 12px 0' }}>{quote.text}</p>
-                      <small style={{ color: 'var(--text-secondary)' }}>— Gemini AI</small>
+                      <small style={{ color: 'var(--text-secondary)' }}>— Inspire AI</small>
                       <div className="ai-actions" style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
                         <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => onFav(quote)}>{liked ? '❤️ Liked' : '🤍 Like'}</button>
                         <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => saveItem(quote.text)}>Save</button>

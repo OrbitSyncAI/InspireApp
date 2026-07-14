@@ -1,0 +1,40 @@
+appId: ai.orbitsync.inspireapp
+productName: InspireApp
+copyright: Copyright © OrbitSyncAI
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - electron-main.cjs
+  - preload.cjs
+  - package.json
+extraMetadata:
+  main: electron-main.cjs
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: InspireApp-Setup-${version}.${ext}
+  legalTrademarks: InspireApp
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: InspireApp
+mac:
+  target:
+    - target: zip
+      arch: [x64, arm64]
+  artifactName: InspireApp-${version}-mac.${ext}
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Utility
+  artifactName: InspireApp-${version}-linux.${ext}
