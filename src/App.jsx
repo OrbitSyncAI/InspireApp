@@ -930,28 +930,18 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
     <div className="static-page">
       <div className="static-card static-wide ai-page" style={{ maxWidth: '800px', margin: '0 auto' }}>
         <h1>🤖 Inspire AI Assistant</h1>
-        <p>Ask anything, attach files (images, documents, PDFs, videos, music), or leave empty to generate motivational quotes.</p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: '1.6', marginBottom: '30px' }}>
+          Welcome to your personal AI companion! Type any question, paste text, or attach files (images, PDFs, documents) to get instant intelligent responses. Not sure what to ask? Just hit the send button with an empty box to discover deeply profound motivational quotes.
+        </p>
 
         <section className="ai-section inspire-ai-section" style={{ position: 'relative', marginTop: '20px', marginBottom: '40px' }}>
           
           <div className="pill-input-container" style={{ display: 'flex', alignItems: 'center', background: 'var(--surface-color, #ffffff)', padding: '8px 16px', borderRadius: '50px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: '1px solid var(--static-border, #e2e8f0)', position: 'relative', zIndex: 10 }}>
             
-            <div className="attachment-dropdown-wrapper" style={{ position: 'relative' }}>
-              <button type="button" className="icon-btn" onClick={() => document.getElementById('attach-menu').classList.toggle('show')} style={{ background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-              </button>
-              
-              <div id="attach-menu" className="dropdown-menu" style={{ position: 'absolute', bottom: '120%', left: '0', background: 'var(--surface-color, #ffffff)', borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.15)', padding: '12px', display: 'none', flexDirection: 'column', gap: '8px', minWidth: '180px', border: '1px solid var(--static-border, #e2e8f0)' }}>
-                <label className="dropdown-item" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '1.2rem' }}>📸</span> Camera
-                  <input type="file" accept="image/*" capture="environment" onChange={(e) => { handleFileChange(e); document.getElementById('attach-menu').classList.remove('show'); }} style={{ display: 'none' }} />
-                </label>
-                <label className="dropdown-item" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '1.2rem' }}>🖼️</span> Upload files
-                  <input type="file" accept="image/*,application/pdf,text/*,audio/*,video/*" onChange={(e) => { handleFileChange(e); document.getElementById('attach-menu').classList.remove('show'); }} style={{ display: 'none' }} />
-                </label>
-              </div>
-            </div>
+            <label className="icon-btn" style={{ background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s', margin: 0, padding: 0 }}>
+              <input type="file" accept="image/*,application/pdf,text/*,audio/*,video/*" onChange={handleFileChange} style={{ display: 'none' }} />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+            </label>
 
             <input
               type="text"
@@ -963,18 +953,9 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
             />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div className="model-selector" style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', padding: '6px 12px', borderRadius: '20px', background: 'transparent', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500' }}>
-                Flash
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              </div>
-              <button type="button" className="icon-btn" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '6px' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+              <button type="button" onClick={generate} disabled={busy} style={{ background: 'var(--primary-color, #667EEA)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>
+                {busy ? <span className="spinner" style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></span> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>}
               </button>
-              {(prompt.trim() !== '' || attachedFile || quotesResult.length === 0) && (
-                <button type="button" onClick={generate} disabled={busy} style={{ background: 'var(--primary-color, #667EEA)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>
-                  {busy ? <span className="spinner" style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></span> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>}
-                </button>
-              )}
             </div>
           </div>
 
@@ -1000,9 +981,9 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
 
             {resultType === 'text' ? (
               <div className="text-response-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '20px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
-                <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: '0.95rem', margin: '0 0 16px 0', lineHeight: '1.6' }}>
-                  {textResult}
-                </pre>
+                <div className="markdown-body" style={{ fontSize: '0.95rem', margin: '0 0 16px 0', lineHeight: '1.6', color: 'var(--text-primary)' }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{textResult}</ReactMarkdown>
+                </div>
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                   <button className="cta-btn cta-secondary" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => copy(textResult)}>📋 Copy Response</button>
                   <button className="cta-btn" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => saveItem(textResult, 'Inspire AI')}>💾 Save Response</button>

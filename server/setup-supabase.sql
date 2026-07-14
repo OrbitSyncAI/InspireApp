@@ -153,7 +153,7 @@ begin
     
     final_prompt := prompt;
     if final_prompt is null or final_prompt = '' then
-        final_prompt := 'Generate 5 high quality inspirational, motivational, or life quotes in English. Format each quote on a new line with its author. Output only the quotes, no other conversational intro/outro text.';
+        final_prompt := 'Generate 5 unique, very long, and deeply profound motivational life quotes in English. Each quote should be at least 2-3 sentences long and offer deep philosophical insight. Do not repeat common quotes. Format each quote on a new line with its author. Output only the quotes, no other conversational intro/outro text. Random Seed: ' || gen_random_uuid()::text;
     end if;
 
     -- Loop 5 Slots sequentially
