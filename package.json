@@ -1,7 +1,7 @@
 {
   "name": "inspire-app",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.1.37",
   "description": "InspireApp motivational quotes app for web, desktop, Android, and iOS.",
   "author": "OrbitSyncAI",
   "repository": {
@@ -15,20 +15,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.3",
-    "bcryptjs": "^3.0.3",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@capacitor/android": "^6.2.1",
-    "@capacitor/cli": "^6.2.1",
-    "@capacitor/core": "^6.2.1",
     "@vitejs/plugin-react": "^4.3.1",
-    "electron": "^31.7.7",
-    "electron-builder": "^25.1.8",
     "vite": "^5.4.2"
   }
 }

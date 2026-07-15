@@ -1,6 +1,6 @@
 /** App identity — bump this on every release so devices show the new version. */
 export const APP_NAME = 'InspireApp'
-export const APP_VERSION = import.meta.env?.VITE_APP_VERSION || '1.2.0'
+export const APP_VERSION = import.meta.env?.VITE_APP_VERSION || '1.1.37'
 export const APP_BUILD = import.meta.env?.VITE_APP_BUILD || '2026.07.15'
 export const GITHUB_OWNER = 'OrbitSyncAI'
 export const GITHUB_REPO = 'InspireApp'
@@ -8,8 +8,6 @@ export const GITHUB_REPO_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO
 export const RELEASES_API = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`
 export const LATEST_RELEASE_API = `${RELEASES_API}/latest`
 export const RELEASES_PAGE = `${GITHUB_REPO_URL}/releases`
-export const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL || 'https://ioghhfomesmpslubvmvu.supabase.co'
-export const SUPABASE_ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY || 'sb_publishable_ffsX161EXZnTiSSotQWdEw_xlemyubc'
 
 /** Parse semver like 1.2.3 or v1.2.3 → [1,2,3] */
 export function parseVersion(v) {
