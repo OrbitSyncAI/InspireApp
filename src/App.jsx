@@ -13,7 +13,7 @@ import AdminCMS from './AdminCMS'
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 
-const tabKeys = Object.keys(appCats).filter(k => k !== 'LIKED')
+
 const PER_PAGE = 10
 const AI_SETTINGS_KEY = 'inspire-ai-settings'
 const AI_SAVED_KEY = 'inspire-ai-saved-quotes'
@@ -45,7 +45,7 @@ function favReducer(state, action) {
 function getSavedIndex(cat) { try { return parseInt(localStorage.getItem('inspire-idx-'+cat) || '0', 10) } catch { return 0 } }
 function saveIndex(cat, idx) { try { localStorage.setItem('inspire-idx-'+cat, String(idx)) } catch {} }
 
-function dailyQuoteIndex() {
+function dailyQuoteIndex(appQuotes) {
   const d = new Date()
   const key = d.getFullYear() * 1000 + (d.getMonth() + 1) * 50 + d.getDate()
   return key % Math.max(appQuotes.length, 1)
@@ -327,7 +327,7 @@ export default function App() {
   const listStart = listPage * PER_PAGE
   const listQuotes = allFiltered.slice(listStart, listStart + PER_PAGE)
   const dailyQuotes = useMemo(() => {
-    const start = dailyQuoteIndex()
+    const start = dailyQuoteIndex(appQuotes)
     return Array.from({ length: Math.min(5, appQuotes.length) }, (_, i) => appQuotes[(start + i * 17) % appQuotes.length])
   }, [])
   const currentPlatform = useMemo(() => {
