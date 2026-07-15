@@ -4135,3 +4135,35 @@ button:active, .cta-btn:active, .nav-btn:active, .action-btn:active, .list-actio
 }
 
 @media (max-width: 768px) { .chat-sidebar { display: none !important; } .chat-main { width: 100%; } }
+
+/* Professional CMS controls and the dedicated mobile chat layout. */
+.chat-mobile-header { display: none; }
+.mini-action { border: 1px solid var(--static-border); background: var(--surface-color, #fff); color: var(--text-primary); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: .8rem; cursor: pointer; }
+.chat-edit-notice { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 8px 0; color: var(--text-secondary); font-size: .82rem; }
+.admin-cms form { background: var(--card-bg, #fff) !important; border: 1px solid var(--static-border); box-shadow: 0 8px 28px rgba(15,23,42,.06); }
+.admin-cms input, .admin-cms textarea, .admin-cms select { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--static-border); border-radius: 10px; background: var(--surface-color, #fff); color: var(--text-primary); font: inherit; }
+.admin-cms input[type='color'] { padding: 4px; cursor: pointer; }
+.admin-cms textarea { min-height: 120px !important; resize: vertical; }
+.admin-cms > div > div:first-child { flex-wrap: wrap; }
+.admin-cms button { min-height: 40px; }
+.slot-card .form-group > div { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 8px !important; }
+.slot-card .form-group > div input { min-width: 0; width: 100% !important; }
+
+@media (max-width: 768px) {
+  .static-page:has(.chat-main) { height: calc(100dvh - 116px) !important; min-height: 0; }
+  .chat-main { min-width: 0; }
+  .chat-mobile-header { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--static-border); background: var(--static-bg); }
+  .chat-mobile-header .cta-btn { min-height: 42px; white-space: nowrap; padding: 0 12px; }
+  .chat-mobile-header select { min-width: 0; flex: 1; border: 1px solid var(--static-border); border-radius: 10px; padding: 0 10px; background: var(--surface-color, #fff); color: var(--text-primary); }
+  .chat-messages { padding: 14px 12px !important; gap: 12px !important; }
+  .chat-messages > div > div { max-width: 94% !important; padding: 12px !important; }
+  .chat-input-area { position: sticky; bottom: 0; padding: 10px 12px !important; padding-bottom: max(10px, env(safe-area-inset-bottom)) !important; z-index: 2; }
+  .chat-input-area > div:last-child { align-items: center; }
+  .admin-cms { margin-top: 12px !important; }
+  .admin-cms form { padding: 16px !important; }
+  .admin-cms form > div[style*='grid'] { grid-template-columns: 1fr !important; }
+  .admin-cms > div > div > div { flex-wrap: wrap; }
+  .slot-card { padding: 14px !important; }
+  .slot-card .form-group > div { flex-direction: row !important; }
+  .slot-card .form-group > div button { flex: 0 0 auto; }
+}

@@ -406,6 +406,9 @@ jobs:
           npx cap sync android
 
       - name: Add Android in-app updater bridge
+        # Downloading and silently launching APK installation triggers Play Protect.
+        # Updates now use the normal browser/system installer flow instead.
+        if: ${{ false }}
         run: |
           mkdir -p android/app/src/main/java/ai/orbitsync/inspireapp
 

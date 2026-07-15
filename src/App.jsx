@@ -884,33 +884,15 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  
-  const [useThinking, setUseThinking] = useState(false)
-  const [thinkingUses, setThinkingUses] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('inspire-thinking-uses') || '[]') } catch { return [] }
-  })
-  
-  // Clean old uses (older than 24h)
-  useEffect(() => {
-    const now = Date.now();
-    const validUses = thinkingUses.filter(t => now - t < 24 * 60 * 60 * 1000);
-    if (validUses.length !== thinkingUses.length) {
-      setThinkingUses(validUses);
-      localStorage.setItem('inspire-thinking-uses', JSON.stringify(validUses));
-    }
-  }, [thinkingUses]);
+  const [editing, setEditing] = useState(null)
+  // Kept only for backward-compatible JSX while the old mode selector is hidden.
+  const useThinking = false
+  const setUseThinking = () => {}
+  const remainingThinking = 0
 
   useEffect(() => {
     localStorage.setItem('inspire-ai-chats', JSON.stringify(chats));
   }, [chats]);
-
-  const remainingThinking = Math.max(0, 10 - thinkingUses.length);
-  let nextUnlockStr = '';
-  if (remainingThinking === 0 && thinkingUses.length > 0) {
-    const oldest = Math.min(...thinkingUses);
-    const unlockTime = new Date(oldest + 24 * 60 * 60 * 1000);
-    nextUnlockStr = `Unlocks at ${unlockTime.toLocaleTimeString()}`;
-  }
 
   const createNewChat = () => {
     const newChat = { id: Date.now().toString(), title: 'New Chat', messages: [], createdAt: new Date().toISOString() };
@@ -928,19 +910,14 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
   }, []);
 
   const generate = async (overridePrompt = null) => {
-    const currentPrompt = overridePrompt !== null ? overridePrompt : prompt.trim();
-    if (!currentPrompt) return;
-    
-    if (useThinking && remainingThinking <= 0) {
-      setError(`Thinking mode limit reached. ${nextUnlockStr}`);
-      return;
-    }
+    const currentPrompt = overridePrompt !== null ? overridePrompt : (prompt.trim() || 'Generate 5 long, original motivational quotes in the best matching language.');
 
     setBusy(true);
     setError('');
     if (overridePrompt === null) setPrompt('');
 
     let currentMessages = activeChat?.messages || [];
+    if (editing && editing.chatId === activeChatId) currentMessages = currentMessages.slice(0, editing.index);
     
     // If it's a regeneration, we don't append the user message again.
     // Assuming overridePrompt implies we just cut the history there and re-run.
@@ -954,19 +931,13 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
     }));
 
     try {
-      if (useThinking) {
-        const newUses = [...thinkingUses, Date.now()];
-        setThinkingUses(newUses);
-        localStorage.setItem('inspire-thinking-uses', JSON.stringify(newUses));
-      }
-
       // Convert format for Gemini
       const historyForGemini = newMessages.map(m => ({
         role: m.role,
         parts: m.parts
       }));
 
-      const responseText = await callAiChatResponse(historyForGemini, useThinking);
+      const responseText = await callAiChatResponse(historyForGemini, false);
 
       setChats(prev => prev.map(c => {
         if (c.id === activeChatId) {
@@ -974,6 +945,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
         }
         return c;
       }));
+      setEditing(null);
     } catch (e) {
       setError(e.message || 'AI generation failed');
       // Revert user message if it failed completely
@@ -991,6 +963,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
 
   const deleteChat = (e, id) => {
     e.stopPropagation();
+    if (!window.confirm('Delete this chat permanently? You cannot undo this action.')) return;
     const newChats = chats.filter(c => c.id !== id);
     setChats(newChats);
     if (activeChatId === id) {
@@ -1003,9 +976,17 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
     const msg = activeChat.messages[index];
     if (msg.role !== 'user') return;
     setPrompt(msg.parts[0].text);
-    // Cut history up to this message
-    setChats(prev => prev.map(c => c.id === activeChatId ? { ...c, messages: c.messages.slice(0, index) } : c));
+    setEditing({ chatId: activeChatId, index });
   }
+
+  const cancelEdit = () => { setEditing(null); setPrompt(''); setError('') }
+  const share = async (text) => {
+    try {
+      if (navigator.share) await navigator.share({ title: 'Inspire Quote', text })
+      else { await copyText(text); triggerToast('Copied for sharing') }
+    } catch {}
+  }
+  const copyAll = () => copy((activeChat?.messages || []).filter(m => m.role === 'model').map(m => m.parts[0].text).join('\n\n'))
 
   const components = {
     a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" style={{ color: '#667EEA', textDecoration: 'underline' }} />
@@ -1030,6 +1011,12 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
 
       {/* Main Chat Area */}
       <div className="chat-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: 'var(--static-bg)' }}>
+        <div className="chat-mobile-header">
+          <button className="cta-btn" onClick={createNewChat}>+ New Chat</button>
+          <select value={activeChatId || ''} onChange={e => setActiveChatId(e.target.value)} aria-label="Choose chat">
+            {chats.map(chat => <option key={chat.id} value={chat.id}>{chat.title}</option>)}
+          </select>
+        </div>
         
         <div className="chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {activeChat?.messages.length === 0 && (
@@ -1056,6 +1043,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
                     <button onClick={() => copy(m.parts[0].text)} style={{ background: 'transparent', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '4px', padding: '4px 8px', fontSize: '0.8rem', cursor: 'pointer', color: 'inherit' }}>📋 Copy</button>
                   </div>
                 )}
+                {m.role === 'model' && <button className="mini-action" style={{ marginTop: '8px' }} onClick={() => share(m.parts[0].text)}>Share quote</button>}
                 {m.role === 'user' && !busy && (
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
                     <button onClick={() => editMessage(idx)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', cursor: 'pointer' }}>✏️ Edit</button>
@@ -1075,8 +1063,10 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
 
         <div className="chat-input-area" style={{ padding: '16px 24px', borderTop: '1px solid var(--static-border)', background: 'var(--static-bg)' }}>
           {error && <div style={{ color: '#FC8181', marginBottom: '8px', fontSize: '0.85rem' }}>{error}</div>}
+          {editing && <div className="chat-edit-notice"><span>Editing message — history stays unchanged until you send.</span><button className="mini-action" onClick={cancelEdit}>Cancel edit</button></div>}
+          {activeChat?.messages?.some(m => m.role === 'model') && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '8px' }}><button className="mini-action" onClick={copyAll}>Copy all quotes</button><button className="mini-action" onClick={() => share((activeChat?.messages || []).filter(m => m.role === 'model').map(m => m.parts[0].text).join('\n\n'))}>Share all</button></div>}
           
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <div style={{ display: 'none' }} aria-hidden="true">
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
                 <input type="radio" checked={!useThinking} onChange={() => setUseThinking(false)} /> ⚡ Fast
@@ -1100,8 +1090,8 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
             />
             <button 
               onClick={() => generate(null)} 
-              disabled={busy || !prompt.trim()} 
-              style={{ background: 'var(--primary-color, #667EEA)', color: '#fff', border: 'none', borderRadius: '50%', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: (busy || !prompt.trim()) ? 0.5 : 1 }}
+              disabled={busy}
+              style={{ background: 'var(--primary-color, #667EEA)', color: '#fff', border: 'none', borderRadius: '50%', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: busy ? 0.5 : 1 }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
             </button>
