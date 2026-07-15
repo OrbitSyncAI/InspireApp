@@ -1,7 +1,7 @@
 /** App identity — bump this on every release so devices show the new version. */
 export const APP_NAME = 'InspireApp'
-export const APP_VERSION = import.meta.env?.VITE_APP_VERSION || '1.1.0'
-export const APP_BUILD = import.meta.env?.VITE_APP_BUILD || '2026.07.09'
+export const APP_VERSION = import.meta.env?.VITE_APP_VERSION || '1.2.0'
+export const APP_BUILD = import.meta.env?.VITE_APP_BUILD || '2026.07.15'
 export const GITHUB_OWNER = 'OrbitSyncAI'
 export const GITHUB_REPO = 'InspireApp'
 export const GITHUB_REPO_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`
