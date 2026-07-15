@@ -332,7 +332,7 @@ export default function App() {
   const dailyQuotes = useMemo(() => {
     if (!appQuotes.length) return []
     const start = dailyQuoteIndex(appQuotes)
-    return Array.from({ length: Math.min(10, appQuotes.length) }, (_, i) => appQuotes[(start + i * 17) % appQuotes.length])
+    return Array.from({ length: Math.min(11, appQuotes.length) }, (_, i) => appQuotes[(start + i * 17) % appQuotes.length])
   }, [appQuotes])
   const currentPlatform = useMemo(() => {
     const forced = new URLSearchParams(window.location.search).get('platform')
@@ -553,12 +553,20 @@ export default function App() {
           </svg>
           <div className="header-actions">
             <nav className="desktop-nav">
-              {navItems.map(item => (
+              {navItems.filter(item => !['about', 'contact', 'privacy', 'terms', 'disclaimer'].includes(item.id)).map(item => (
                 <button key={item.id} className={navItemActive(item.id) ? 'dn-active' : ''} onClick={() => runNavItem(item.id)}>
                   {item.label}
                   {item.badge && <span className="nav-badge-dot" />}
                 </button>
               ))}
+              <div className="desktop-pages-menu">
+                <button className={['about', 'contact', 'privacy', 'terms', 'disclaimer'].includes(page) ? 'dn-active' : ''}>Pages <span aria-hidden="true">▾</span></button>
+                <div className="desktop-pages-dropdown">
+                  {navItems.filter(item => ['about', 'contact', 'privacy', 'terms', 'disclaimer'].includes(item.id)).map(item => (
+                    <button key={item.id} onClick={() => runNavItem(item.id)}>{item.label}</button>
+                  ))}
+                </div>
+              </div>
             </nav>
             <button className="theme-toggle" onClick={() => setDark(prev => !prev)} title={dark ? 'Light' : 'Dark'}>
               {dark ? '☀️' : '🌙'}
@@ -781,22 +789,22 @@ function DailyPage({ quotes, navTo, onFav, onSave, favorites, triggerToast }) {
       return JSON.parse(localStorage.getItem(`inspire-daily-ai-${dateKey}`) || '[]')
     } catch { return [] }
   })
-  const displayQuotes = aiQuotes.length === 10 ? aiQuotes : quotes
+  const displayQuotes = aiQuotes.length === 11 ? aiQuotes : quotes
   const lead = displayQuotes[0] || { category: 'MOTIVATION' }
   const [g1, g2] = gradients[lead.category] || ['#667EEA', '#764BA2']
 
   useEffect(() => {
     const dateKey = new Date().toISOString().slice(0, 10)
-    if (aiQuotes.length === 10) return
+    if (aiQuotes.length === 11) return
     let cancelled = false
     const createDailyQuotes = async () => {
       try {
         const { data, error } = await supabase.rpc('generate_ai_response', {
-          prompt: `Create exactly 10 long, original motivational quotes for ${dateKey}. Return only the 10 quotes, one per line, no numbering, no title, no author, and no introductory text. Make each quote distinct and at least two meaningful sentences.`
+          prompt: `Create exactly 11 long, original motivational quotes for ${dateKey}. Return only the 11 quotes, one per line, no numbering, no title, no author, and no introductory text. Make each quote distinct and at least two meaningful sentences.`
         })
         if (error || !data?.success) return
-        const generated = parseAiQuotes(data.text, 10)
-        if (generated.length !== 10 || cancelled) return
+        const generated = parseAiQuotes(data.text, 11)
+        if (generated.length !== 11 || cancelled) return
         const prepared = generated.map((text, i) => ({ text, author: 'Sohel', category: quotes[i % quotes.length]?.category || 'MOTIVATION' }))
         localStorage.setItem(`inspire-daily-ai-${dateKey}`, JSON.stringify(prepared))
         setAiQuotes(prepared)
@@ -816,7 +824,7 @@ function DailyPage({ quotes, navTo, onFav, onSave, favorites, triggerToast }) {
     <div className="static-page daily-page">
       <div className="static-card daily-card" style={{ background: `linear-gradient(145deg, ${g1}22, ${g2}22)` }}>
         <p className="daily-kicker">☀️ Quote of the Day</p>
-        <h1>Today’s 10 Inspirations</h1>
+        <h1>Today’s 11 Inspirations</h1>
         <div className="daily-grid">
           {displayQuotes.map((quote, i) => {
             const isFav = favorites.includes(quote.text)
@@ -916,7 +924,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(null)
-  const [language, setLanguage] = useState('English')
+  const [language, setLanguage] = useState('Default Language')
   // Kept only for backward-compatible JSX while the old mode selector is hidden.
   const useThinking = false
   const setUseThinking = () => {}
@@ -944,7 +952,10 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
 
   const generate = async (overridePrompt = null) => {
     const request = overridePrompt !== null ? overridePrompt : (prompt.trim() || 'Give me an uplifting quote.');
-    const generationInstruction = `Reply with exactly ONE long, original motivational quote in ${language}. Do not list multiple quotes, do not add a refusal, heading, explanation, or translation. Keep it distinct from every earlier quote in this chat unless I explicitly ask to repeat one.`
+    const languageInstruction = language === 'Default Language'
+      ? 'Reply in the same language and writing system used in the user request. If the request mixes languages, use its dominant language.'
+      : `Reply in ${language}.`
+    const generationInstruction = `${languageInstruction} Give exactly ONE long, original motivational quote. Do not list multiple quotes, do not add a refusal, heading, explanation, or translation. Keep it distinct from every earlier quote in this chat unless I explicitly ask to repeat one.`
 
     setBusy(true);
     setError('');
@@ -1048,12 +1059,15 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
       <div className="chat-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: 'var(--static-bg)' }}>
         <div className="chat-mobile-header">
           <button className="cta-btn" onClick={createNewChat}>+ New Chat</button>
-          <label className="chat-select-control">
-            <span>Chat</span>
+          <div className="mobile-chat-picker">
+            <label className="chat-select-control">
+              <span>Chat</span>
             <select value={activeChatId || ''} onChange={e => setActiveChatId(e.target.value)} aria-label="Choose chat">
             {chats.map(chat => <option key={chat.id} value={chat.id}>{chat.title}</option>)}
             </select>
-          </label>
+            </label>
+            <button className="mobile-chat-delete" onClick={e => activeChatId && deleteChat(e, activeChatId)} disabled={!activeChatId} aria-label="Delete selected chat">🗑</button>
+          </div>
         </div>
         
         <div className="chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1120,6 +1134,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
             <label className="chat-language-control">
               <span>Language</span>
               <select value={language} onChange={e => setLanguage(e.target.value)} aria-label="Quote language" disabled={busy}>
+                <option>Default Language</option>
                 {AI_LANGUAGES.map(option => <option key={option}>{option}</option>)}
               </select>
             </label>
