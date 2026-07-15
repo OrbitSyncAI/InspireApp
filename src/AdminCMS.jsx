@@ -25,12 +25,13 @@ export default function AdminCMS({ triggerToast }) {
   };
 
   useEffect(() => {
-    if (activeTab === 'categories') fetchCategories();
-    else fetchQuotes();
-  }, [activeTab]);
+    fetchCategories();
+    fetchQuotes();
+  }, []);
 
   // Quote form state
   const [quoteForm, setQuoteForm] = useState({ id: null, text: '', author: 'Sohel Khan', category_ids: [] });
+  const [categoryForm, setCategoryForm] = useState({ id: null, label: '', emoji: '✨', gradient_start: '#667EEA', gradient_end: '#764BA2' });
   
   const saveQuote = async (e) => {
     e.preventDefault();
@@ -69,6 +70,31 @@ export default function AdminCMS({ triggerToast }) {
     });
   };
 
+  const saveCategory = async (e) => {
+    e.preventDefault();
+    const id = (categoryForm.id || categoryForm.label)
+      .trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!id || !categoryForm.label.trim()) return;
+    setBusy(true);
+    const payload = { ...categoryForm, id, label: categoryForm.label.trim() };
+    const { error } = await supabase.from('app_categories').upsert(payload);
+    setBusy(false);
+    if (error) return triggerToast(`Category save failed: ${error.message}`);
+    triggerToast('Category saved');
+    setCategoryForm({ id: null, label: '', emoji: '✨', gradient_start: '#667EEA', gradient_end: '#764BA2' });
+    fetchCategories();
+  };
+
+  const deleteCategory = async (id) => {
+    if (!window.confirm('Delete this category? Existing quotes will remain, but will no longer show in this category.')) return;
+    setBusy(true);
+    const { error } = await supabase.from('app_categories').delete().eq('id', id);
+    setBusy(false);
+    if (error) return triggerToast(`Category delete failed: ${error.message}`);
+    triggerToast('Category deleted');
+    fetchCategories();
+  };
+
   return (
     <div style={{ marginTop: '20px' }}>
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
@@ -98,10 +124,10 @@ export default function AdminCMS({ triggerToast }) {
             <div style={{ marginBottom: '15px' }}>
               <label style={{ display: 'block', marginBottom: '5px' }}>Assign Categories:</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {['MOTIVATION', 'SUCCESS', 'LIFE', 'WISDOM', 'LEADERSHIP'].map(c => (
-                  <label key={c} style={{ background: quoteForm.category_ids.includes(c) ? 'var(--primary-color)' : 'rgba(0,0,0,0.1)', color: quoteForm.category_ids.includes(c) ? '#fff' : 'inherit', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer' }}>
-                    <input type="checkbox" style={{ display: 'none' }} checked={quoteForm.category_ids.includes(c)} onChange={() => toggleCategoryForQuote(c)} />
-                    {c}
+                {categories.map(c => (
+                  <label key={c.id} style={{ background: quoteForm.category_ids.includes(c.id) ? 'var(--primary-color)' : 'rgba(0,0,0,0.1)', color: quoteForm.category_ids.includes(c.id) ? '#fff' : 'inherit', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                    <input type="checkbox" style={{ display: 'none' }} checked={quoteForm.category_ids.includes(c.id)} onChange={() => toggleCategoryForQuote(c.id)} />
+                    {c.emoji || '✨'} {c.label}
                   </label>
                 ))}
               </div>
@@ -131,9 +157,32 @@ export default function AdminCMS({ triggerToast }) {
       )}
 
       {activeTab === 'categories' && (
-        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px' }}>
-          <h3>Category Management</h3>
-          <p>Categories feature is locked to core setup for now. Use database directly to add new categories.</p>
+        <div>
+          <form onSubmit={saveCategory} style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px', marginBottom: '20px' }}>
+            <h3>{categoryForm.id ? 'Edit Category' : 'Add Category'}</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: '10px', marginBottom: '10px' }}>
+              <input value={categoryForm.label} onChange={e => setCategoryForm({ ...categoryForm, label: e.target.value })} placeholder="Category name" required />
+              <input value={categoryForm.emoji} onChange={e => setCategoryForm({ ...categoryForm, emoji: e.target.value })} placeholder="✨" aria-label="Category emoji" />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+              <input type="color" value={categoryForm.gradient_start} onChange={e => setCategoryForm({ ...categoryForm, gradient_start: e.target.value })} aria-label="First category colour" />
+              <input type="color" value={categoryForm.gradient_end} onChange={e => setCategoryForm({ ...categoryForm, gradient_end: e.target.value })} aria-label="Second category colour" />
+            </div>
+            <button type="submit" className="cta-btn" disabled={busy}>{categoryForm.id ? 'Update Category' : 'Save Category'}</button>
+            {categoryForm.id && <button type="button" className="cta-btn cta-secondary" style={{ marginLeft: '10px' }} onClick={() => setCategoryForm({ id: null, label: '', emoji: '✨', gradient_start: '#667EEA', gradient_end: '#764BA2' })}>Cancel</button>}
+          </form>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {categories.map(category => (
+              <div key={category.id} style={{ border: '1px solid var(--static-border)', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+                <span>{category.emoji || '✨'} <strong>{category.label}</strong> <small>({category.id})</small></span>
+                <span style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => setCategoryForm(category)} style={{ background: 'none', border: 'none', color: '#667EEA', cursor: 'pointer' }}>Edit</button>
+                  <button onClick={() => deleteCategory(category.id)} style={{ background: 'none', border: 'none', color: '#FC8181', cursor: 'pointer' }}>Delete</button>
+                </span>
+              </div>
+            ))}
+            {categories.length === 0 && !busy && <p>Create your first category above.</p>}
+          </div>
         </div>
       )}
     </div>
