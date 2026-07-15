@@ -736,6 +736,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Remove superseded releases and workflow runs
+        # Never let cleanup cancel or remove the release that was just created.
+        # Old assets are cleaned in a separately controlled maintenance run.
+        if: ${{ false }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
