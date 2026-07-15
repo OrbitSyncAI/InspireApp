@@ -384,7 +384,7 @@ jobs:
       - name: Install dependencies + Capacitor
         run: |
           npm ci --prefer-offline
-          npm install --save-dev @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 typescript --prefer-offline --no-fund --no-audit
+          npm install --save-dev @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 --prefer-offline --no-fund --no-audit
 
       - name: Build web bundle for Android
         env:
@@ -593,7 +593,7 @@ jobs:
       - name: Install dependencies + Capacitor iOS
         run: |
           npm ci --prefer-offline
-          npm install --save-dev @capacitor/core@6 @capacitor/cli@6 @capacitor/ios@6 typescript --prefer-offline --no-fund --no-audit
+          npm install --save-dev @capacitor/core@6 @capacitor/cli@6 @capacitor/ios@6 --prefer-offline --no-fund --no-audit
 
       - name: Build web bundle for iOS
         env:
