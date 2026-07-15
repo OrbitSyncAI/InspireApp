@@ -1,0 +1,191 @@
+}
+
+async function callAiResponse(prompt, mimeType = '', base64Data = '') {
+  console.log(`[Supabase RPC] Invoking generate_ai_response`);
+  const { data, error } = await supabase.rpc('generate_ai_response', {
+    prompt,
+    mime_type: mimeType,
+    base64_data: base64Data
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (data && data.success === false) {
+    throw new Error(data.error || 'AI generation failed');
+  }
+
+  return data.text;
+}
+
+function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerToast }) {
+  const [prompt, setPrompt] = useState('')
+  const [attachedFile, setAttachedFile] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [resultType, setResultType] = useState('quotes') // 'quotes' | 'text'
+  const [textResult, setTextResult] = useState('')
+  const [quotesResult, setQuotesResult] = useState([])
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+      setAttachedFile(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAttachedFile({
+        name: file.name,
+        type: file.type,
+        base64: reader.result.split(',')[1],
+        previewUrl: file.type.startsWith('image/') ? reader.result : null
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearAttachedFile = () => {
+    setAttachedFile(null);
+  };
+
+  const generate = async () => {
+    setBusy(true)
+    setError('')
+    setTextResult('')
+    setQuotesResult([])
+
+    try {
+      const isPromptEmpty = prompt.trim() === '';
+      const responseText = await callAiResponse(
+        prompt, 
+        attachedFile?.type || '', 
+        attachedFile?.base64 || ''
+      );
+
+      if (isPromptEmpty) {
+        // Fallback mode: parse 5 motivational quotes from text
+        setResultType('quotes');
+        const parsed = parseAiQuotes(responseText, 5).map(text => ({
+          text,
+          author: 'Inspire AI',
+          category: 'MOTIVATION'
+        }));
+        setQuotesResult(parsed);
+      } else {
+        // Full AI response mode
+        setResultType('text');
+        setTextResult(responseText);
+      }
+    } catch (e) {
+      setError(e.message || 'AI generation failed');
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const copy = (text) => {
+    copyText(text).then(ok => {
+      if (ok) triggerToast('Copied to clipboard! 📋')
+    })
+  }
+
+  const saveItem = (text, author = 'Inspire AI') => {
+    const exists = savedQuotes.some(q => q.text === text)
+    if (exists) {
+      triggerToast('Already saved! 💾')
+      return
+    }
+    setSavedQuotes(prev => [{ text, author, savedAt: new Date().toISOString() }, ...prev])
+    triggerToast('Saved successfully! 💾')
+  }
+
+  return (
+    <div className="static-page">
+      <div className="static-card static-wide ai-page" style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <h1>🤖 Inspire AI Assistant</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: '1.6', marginBottom: '30px' }}>
+          Welcome to your personal AI companion! Type any question, paste text, or attach files (images, PDFs, documents) to get instant intelligent responses. Not sure what to ask? Just hit the send button with an empty box to discover deeply profound motivational quotes.
+        </p>
+
+        <section className="ai-section inspire-ai-section" style={{ position: 'relative', marginTop: '20px', marginBottom: '40px' }}>
+          
+          <div className="pill-input-container" style={{ display: 'flex', alignItems: 'center', background: 'var(--surface-color, #ffffff)', padding: '8px 16px', borderRadius: '50px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: '1px solid var(--static-border, #e2e8f0)', position: 'relative', zIndex: 10 }}>
+            
+            <label className="icon-btn" style={{ background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s', margin: 0, padding: 0 }}>
+              <input type="file" accept="image/*,application/pdf,text/*,audio/*,video/*" onChange={handleFileChange} style={{ display: 'none' }} />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+            </label>
+
+            <input
+              type="text"
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') generate(); }}
+              placeholder="Ask Inspire..."
+              style={{ flex: 1, border: 'none', background: 'transparent', padding: '0 16px', fontSize: '1.05rem', outline: 'none', color: 'var(--text-primary)' }}
+            />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button type="button" onClick={generate} disabled={busy} style={{ background: 'var(--primary-color, #667EEA)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>
+                {busy ? <span className="spinner" style={{ width: '16px', height: '16px', border: '2px solid transparent', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></span> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>}
+              </button>
+            </div>
+          </div>
+
+          {attachedFile && (
+            <div className="attachment-preview-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'var(--surface-color, #ffffff)', padding: '6px 14px', borderRadius: '20px', border: '1px solid var(--static-border, #e2e8f0)', marginTop: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+              {attachedFile.previewUrl ? (
+                <img src={attachedFile.previewUrl} alt="Preview" style={{ width: '24px', height: '24px', borderRadius: '4px', objectFit: 'cover' }} />
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+              )}
+              <span style={{ fontSize: '0.85rem', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{attachedFile.name}</span>
+              <button type="button" onClick={clearAttachedFile} style={{ background: 'none', border: 'none', padding: '0', cursor: 'pointer', color: 'var(--text-secondary)', marginLeft: '4px' }}>✕</button>
+            </div>
+          )}
+
+          {error && <p className="ai-error" style={{ color: '#FC8181', marginTop: '16px', fontSize: '0.95rem', textAlign: 'center' }}>{error}</p>}
+        </section>
+
+        {/* Results Container */}
+        {(textResult || quotesResult.length > 0) && (
+          <section className="ai-results-section" style={{ marginTop: '24px', textAlign: 'left' }}>
+            <h2 style={{ fontSize: '1.15rem', marginBottom: '14px' }}>✨ Inspire AI Response</h2>
+
+            {resultType === 'text' ? (
+              <div className="text-response-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '20px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
+                <div className="markdown-body" style={{ fontSize: '0.95rem', margin: '0 0 16px 0', lineHeight: '1.6', color: 'var(--text-primary)' }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{textResult}</ReactMarkdown>
+                </div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button className="cta-btn cta-secondary" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => copy(textResult)}>📋 Copy Response</button>
+                  <button className="cta-btn" style={{ padding: '6px 12px', minHeight: 'auto' }} onClick={() => saveItem(textResult, 'Inspire AI')}>💾 Save Response</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {quotesResult.map((quote, i) => {
+                  const liked = favorites.includes(quote.text)
+                  return (
+                    <article key={i} className="ai-quote-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
+                      <p style={{ fontSize: '1rem', margin: '0 0 12px 0' }}>{quote.text}</p>
+                      <small style={{ color: 'var(--text-secondary)' }}>— Inspire AI</small>
+                      <div className="ai-actions" style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+                        <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => onFav(quote)}>{liked ? '❤️ Liked' : '🤍 Like'}</button>
+                        <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => saveItem(quote.text)}>Save</button>
+                        <button className="cta-btn cta-secondary" style={{ padding: '4px 10px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => copy(quote.text)}>Copy</button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+    </div>
+  )
+}
+

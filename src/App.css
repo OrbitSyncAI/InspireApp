@@ -3777,13 +3777,9 @@ button:active, .cta-btn:active, .nav-btn:active, .action-btn:active, .list-actio
   .slot-card {
     padding: 12px !important;
   }
-  .slot-card > div {
+  .input-group-mobile {
     flex-direction: column !important;
     align-items: stretch !important;
-  }
-  .slot-card input {
-    margin-top: 8px;
-    width: 100% !important;
   }
   .attachment-grid {
     grid-template-columns: repeat(2, 1fr) !important;
@@ -4137,3 +4133,5 @@ button:active, .cta-btn:active, .nav-btn:active, .action-btn:active, .list-actio
   .ai-markdown-content { font-size: 0.9rem; }
   .ai-quote-text { font-size: 0.9rem; }
 }
+
+@media (max-width: 768px) { .chat-sidebar { display: none !important; } .chat-main { width: 100%; } }
