@@ -2,7 +2,7 @@
 create extension if not exists http;
 
 -- ========================================================
--- API Keys Configuration Table (Exclusively Gemini, 5 Slots)
+-- API Keys Configuration Table (Exclusively Gemini, 10 Slots)
 -- ========================================================
 create table if not exists public.api_config (
     id text primary key default 'config',
@@ -19,6 +19,16 @@ ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_4_key text def
 ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_4_model text default 'gemini-1.5-flash';
 ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_5_key text default '';
 ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_5_model text default 'gemini-1.5-flash';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_6_key text default '';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_6_model text default 'gemini-3.1-flash-lite';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_7_key text default '';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_7_model text default 'gemini-3.1-flash-lite';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_8_key text default '';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_8_model text default 'gemini-3.1-flash-lite';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_9_key text default '';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_9_model text default 'gemini-3.1-flash-lite';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_10_key text default '';
+ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_10_model text default 'gemini-3.1-flash-lite';
 
 -- ========================================================
 -- Admin Profile Table
@@ -133,7 +143,7 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- 3. Unified Generation RPC: Loops 5 Gemini Slots (Publicly Callable, Keys are Safe)
+-- 3. Unified Generation RPC: Loops 10 Gemini Slots (Publicly Callable, Keys are Safe)
 create or replace function public.generate_ai_response(
     prompt text,
     mime_type text default '',
@@ -156,25 +166,10 @@ begin
         final_prompt := 'Generate 5 unique, very long, and deeply profound motivational life quotes in English. Each quote should be at least 2-3 sentences long and offer deep philosophical insight. Do not repeat common quotes. Format each quote on a new line with its author. Output only the quotes, no other conversational intro/outro text. Random Seed: ' || gen_random_uuid()::text;
     end if;
 
-    -- Loop 5 Slots sequentially
-    for i in 1..5 loop
-        -- Dynamic slot extraction
-        if i = 1 then
-            slot_key := config_record.gemini_api_1_key;
-            slot_model := config_record.gemini_api_1_model;
-        elsif i = 2 then
-            slot_key := config_record.gemini_api_2_key;
-            slot_model := config_record.gemini_api_2_model;
-        elsif i = 3 then
-            slot_key := config_record.gemini_api_3_key;
-            slot_model := config_record.gemini_api_3_model;
-        elsif i = 4 then
-            slot_key := config_record.gemini_api_4_key;
-            slot_model := config_record.gemini_api_4_model;
-        elsif i = 5 then
-            slot_key := config_record.gemini_api_5_key;
-            slot_model := config_record.gemini_api_5_model;
-        end if;
+    -- Loop 10 slots sequentially
+    for i in 1..10 loop
+        slot_key := to_jsonb(config_record)->>format('gemini_api_%s_key', i);
+        slot_model := to_jsonb(config_record)->>format('gemini_api_%s_model', i);
 
         -- Attempt to call if key is present
         if slot_key is not null and slot_key != '' then

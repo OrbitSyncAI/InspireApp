@@ -1,5 +1,6 @@
 const { Client } = require('pg');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const client = new Client({
   connectionString: process.env.DATABASE_URL,
@@ -21,7 +22,11 @@ async function addColumns() {
       "ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_4_key text default '';",
       "ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_4_model text default 'gemini-3.1-flash-lite';",
       "ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_5_key text default '';",
-      "ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_5_model text default 'gemini-3.1-flash-lite';"
+      "ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_5_model text default 'gemini-3.1-flash-lite';",
+      ...Array.from({ length: 5 }, (_, i) => i + 6).flatMap(i => [
+        `ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_${i}_key text default '';`,
+        `ALTER TABLE public.api_config ADD COLUMN IF NOT EXISTS gemini_api_${i}_model text default 'gemini-3.1-flash-lite';`
+      ])
     ];
 
     for (let q of queries) {

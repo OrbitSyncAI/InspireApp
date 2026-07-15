@@ -330,9 +330,10 @@ export default function App() {
   const listStart = listPage * PER_PAGE
   const listQuotes = allFiltered.slice(listStart, listStart + PER_PAGE)
   const dailyQuotes = useMemo(() => {
+    if (!appQuotes.length) return []
     const start = dailyQuoteIndex(appQuotes)
     return Array.from({ length: Math.min(10, appQuotes.length) }, (_, i) => appQuotes[(start + i * 17) % appQuotes.length])
-  }, [])
+  }, [appQuotes])
   const currentPlatform = useMemo(() => {
     const forced = new URLSearchParams(window.location.search).get('platform')
     return forced || detectPlatform()
@@ -774,8 +775,38 @@ export default function App() {
 }
 
 function DailyPage({ quotes, navTo, onFav, onSave, favorites, triggerToast }) {
-  const lead = quotes[0] || { category: 'MOTIVATION' }
+  const [aiQuotes, setAiQuotes] = useState(() => {
+    try {
+      const dateKey = new Date().toISOString().slice(0, 10)
+      return JSON.parse(localStorage.getItem(`inspire-daily-ai-${dateKey}`) || '[]')
+    } catch { return [] }
+  })
+  const displayQuotes = aiQuotes.length === 10 ? aiQuotes : quotes
+  const lead = displayQuotes[0] || { category: 'MOTIVATION' }
   const [g1, g2] = gradients[lead.category] || ['#667EEA', '#764BA2']
+
+  useEffect(() => {
+    const dateKey = new Date().toISOString().slice(0, 10)
+    if (aiQuotes.length === 10) return
+    let cancelled = false
+    const createDailyQuotes = async () => {
+      try {
+        const { data, error } = await supabase.rpc('generate_ai_response', {
+          prompt: `Create exactly 10 long, original motivational quotes for ${dateKey}. Return only the 10 quotes, one per line, no numbering, no title, no author, and no introductory text. Make each quote distinct and at least two meaningful sentences.`
+        })
+        if (error || !data?.success) return
+        const generated = parseAiQuotes(data.text, 10)
+        if (generated.length !== 10 || cancelled) return
+        const prepared = generated.map((text, i) => ({ text, author: 'Sohel', category: quotes[i % quotes.length]?.category || 'MOTIVATION' }))
+        localStorage.setItem(`inspire-daily-ai-${dateKey}`, JSON.stringify(prepared))
+        setAiQuotes(prepared)
+      } catch {
+        // Local daily quotes remain available when an AI provider is offline.
+      }
+    }
+    createDailyQuotes()
+    return () => { cancelled = true }
+  }, [aiQuotes.length, quotes])
   const copy = (text) => {
     copyText(text).then(ok => {
       if (ok) triggerToast('Quote copied to clipboard! 📋')
@@ -787,12 +818,12 @@ function DailyPage({ quotes, navTo, onFav, onSave, favorites, triggerToast }) {
         <p className="daily-kicker">☀️ Quote of the Day</p>
         <h1>Today’s 5 Inspirations</h1>
         <div className="daily-grid">
-          {quotes.map((quote, i) => {
+          {displayQuotes.map((quote, i) => {
             const isFav = favorites.includes(quote.text)
             return (
               <article className={i === 0 ? 'daily-quote-card daily-quote-card-lead' : 'daily-quote-card'} key={quote.text}>
                 <p className="daily-quote">“{quote.text}”</p>
-                <p className="daily-author">— {quote.author}</p>
+                <p className="daily-author">— Sohel</p>
                 <p className="daily-cat">{localCategories[quote.category]?.emoji} {localCategories[quote.category]?.label || 'Quotes'}</p>
                 <div className="daily-actions">
                   <button className="cta-btn" onClick={() => onFav(quote)}>{isFav ? '❤️ Liked' : '🤍 Like'}</button>
@@ -885,6 +916,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(null)
+  const [language, setLanguage] = useState('English')
   // Kept only for backward-compatible JSX while the old mode selector is hidden.
   const useThinking = false
   const setUseThinking = () => {}
@@ -910,7 +942,8 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
   }, []);
 
   const generate = async (overridePrompt = null) => {
-    const currentPrompt = overridePrompt !== null ? overridePrompt : (prompt.trim() || 'Generate exactly one long, original English motivational quote. Do not repeat a previous quote.');
+    const request = overridePrompt !== null ? overridePrompt : (prompt.trim() || 'Give me an uplifting quote.');
+    const currentPrompt = `${request}\n\nReply with exactly ONE long, original motivational quote in ${language}. Do not list multiple quotes, do not add a refusal, heading, explanation, or translation. Keep it distinct from every earlier quote in this chat unless I explicitly ask to repeat one.`;
 
     setBusy(true);
     setError('');
@@ -1013,9 +1046,12 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
       <div className="chat-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', background: 'var(--static-bg)' }}>
         <div className="chat-mobile-header">
           <button className="cta-btn" onClick={createNewChat}>+ New Chat</button>
-          <select value={activeChatId || ''} onChange={e => setActiveChatId(e.target.value)} aria-label="Choose chat">
+          <label className="chat-select-control">
+            <span>Chat</span>
+            <select value={activeChatId || ''} onChange={e => setActiveChatId(e.target.value)} aria-label="Choose chat">
             {chats.map(chat => <option key={chat.id} value={chat.id}>{chat.title}</option>)}
-          </select>
+            </select>
+          </label>
         </div>
         
         <div className="chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1079,6 +1115,12 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
+            <label className="chat-language-control">
+              <span>Language</span>
+              <select value={language} onChange={e => setLanguage(e.target.value)} aria-label="Quote language" disabled={busy}>
+                {AI_LANGUAGES.map(option => <option key={option}>{option}</option>)}
+              </select>
+            </label>
             <input
               type="text"
               value={prompt}
@@ -1366,19 +1408,10 @@ function AdminPanelPage({ navTo, triggerToast }) {
   ]);
   const [latency, setLatency] = useState(null);
 
-  // 5-Slot Gemini Configurations
-  const [config, setConfig] = useState({
-    gemini_api_1_key: '',
-    gemini_api_1_model: 'gemini-3.1-flash-lite',
-    gemini_api_2_key: '',
-    gemini_api_2_model: 'gemini-3.1-flash-lite',
-    gemini_api_3_key: '',
-    gemini_api_3_model: 'gemini-3.1-flash-lite',
-    gemini_api_4_key: '',
-    gemini_api_4_model: 'gemini-3.1-flash-lite',
-    gemini_api_5_key: '',
-    gemini_api_5_model: 'gemini-3.1-flash-lite'
-  });
+  const emptyGeminiConfig = () => Object.fromEntries(Array.from({ length: 10 }, (_, i) => [i + 1, i + 1]).flatMap(i => [
+    [`gemini_api_${i}_key`, ''], [`gemini_api_${i}_model`, 'gemini-3.1-flash-lite']
+  ]));
+  const [config, setConfig] = useState(emptyGeminiConfig);
 
   // Hide/Unhide toggles state for each slot
   const [showKeys, setShowKeys] = useState({
@@ -1386,7 +1419,7 @@ function AdminPanelPage({ navTo, triggerToast }) {
     2: false,
     3: false,
     4: false,
-    5: false
+    5: false, 6: false, 7: false, 8: false, 9: false, 10: false
   });
 
   // Fetch configuration
@@ -1400,18 +1433,10 @@ function AdminPanelPage({ navTo, triggerToast }) {
       
       if (error) throw error;
       if (data) {
-        setConfig({
-          gemini_api_1_key: data.gemini_api_1_key || '',
-          gemini_api_1_model: data.gemini_api_1_model || 'gemini-3.1-flash-lite',
-          gemini_api_2_key: data.gemini_api_2_key || '',
-          gemini_api_2_model: data.gemini_api_2_model || 'gemini-3.1-flash-lite',
-          gemini_api_3_key: data.gemini_api_3_key || '',
-          gemini_api_3_model: data.gemini_api_3_model || 'gemini-3.1-flash-lite',
-          gemini_api_4_key: data.gemini_api_4_key || '',
-          gemini_api_4_model: data.gemini_api_4_model || 'gemini-3.1-flash-lite',
-          gemini_api_5_key: data.gemini_api_5_key || '',
-          gemini_api_5_model: data.gemini_api_5_model || 'gemini-3.1-flash-lite'
-        });
+        setConfig(Object.fromEntries(Array.from({ length: 10 }, (_, i) => i + 1).flatMap(i => [
+          [`gemini_api_${i}_key`, data[`gemini_api_${i}_key`] || ''],
+          [`gemini_api_${i}_model`, data[`gemini_api_${i}_model`] || 'gemini-3.1-flash-lite']
+        ])));
       }
     } catch (err) {
       console.error(err);
@@ -1510,20 +1535,7 @@ function AdminPanelPage({ navTo, triggerToast }) {
     try {
       const { error } = await supabase
         .from('api_config')
-        .upsert({
-          id: 'config',
-          gemini_api_1_key: config.gemini_api_1_key,
-          gemini_api_1_model: config.gemini_api_1_model,
-          gemini_api_2_key: config.gemini_api_2_key,
-          gemini_api_2_model: config.gemini_api_2_model,
-          gemini_api_3_key: config.gemini_api_3_key,
-          gemini_api_3_model: config.gemini_api_3_model,
-          gemini_api_4_key: config.gemini_api_4_key,
-          gemini_api_4_model: config.gemini_api_4_model,
-          gemini_api_5_key: config.gemini_api_5_key,
-          gemini_api_5_model: config.gemini_api_5_model,
-          updated_at: new Date().toISOString()
-        });
+        .upsert({ id: 'config', ...config, updated_at: new Date().toISOString() });
 
       if (error) throw error;
       triggerToast(`Gemini Slot ${slotIndex} config permanently saved! 💾`);
@@ -1640,7 +1652,7 @@ function AdminPanelPage({ navTo, triggerToast }) {
           <h2>🔑 Gemini API Slots (Exclusively Google Gemini)</h2>
           
           <div className="slots-layout" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            {[1, 2, 3, 4, 5].map(idx => {
+            {Array.from({ length: 10 }, (_, i) => i + 1).map(idx => {
               const keyVal = config[`gemini_api_${idx}_key`] || '';
               const modelVal = config[`gemini_api_${idx}_model`] || 'gemini-3.1-flash-lite';
               const isConfigured = keyVal.trim() !== '';

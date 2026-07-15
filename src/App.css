@@ -4138,6 +4138,10 @@ button:active, .cta-btn:active, .nav-btn:active, .action-btn:active, .list-actio
 
 /* Professional CMS controls and the dedicated mobile chat layout. */
 .chat-mobile-header { display: none; }
+.chat-select-control, .chat-language-control { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-secondary); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.chat-select-control select, .chat-language-control select { min-width: 0; appearance: auto; border: 1px solid var(--static-border); border-radius: 10px; background: var(--surface-color, #fff); color: var(--text-primary); font: inherit; font-size: .88rem; font-weight: 600; letter-spacing: normal; text-transform: none; padding: 9px 30px 9px 10px; cursor: pointer; }
+.chat-language-control { flex: 0 0 auto; }
+.chat-language-control select { max-width: 125px; }
 .chat-sidebar { padding-top: 8px; background: linear-gradient(180deg, #f8faff 0%, #eef2ff 100%) !important; }
 .chat-sidebar .cta-btn { border-radius: 12px !important; box-shadow: 0 8px 18px rgba(102,126,234,.2); }
 .chat-sidebar > div:nth-child(2) > div { border: 1px solid transparent; transition: background .18s, border-color .18s; }
@@ -4158,7 +4162,10 @@ button:active, .cta-btn:active, .nav-btn:active, .action-btn:active, .list-actio
   .chat-main { min-width: 0; }
   .chat-mobile-header { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--static-border); background: var(--static-bg); }
   .chat-mobile-header .cta-btn { min-height: 42px; white-space: nowrap; padding: 0 12px; }
-  .chat-mobile-header select { min-width: 0; flex: 1; border: 1px solid var(--static-border); border-radius: 10px; padding: 0 10px; background: var(--surface-color, #fff); color: var(--text-primary); }
+  .chat-select-control { flex: 1; padding: 4px 8px; border: 1px solid var(--static-border); border-radius: 11px; background: var(--surface-color, #fff); }
+  .chat-select-control select { flex: 1; width: 100%; border: 0; background: transparent; padding: 5px 0; }
+  .chat-language-control span { display: none; }
+  .chat-language-control select { max-width: 104px; padding: 11px 8px; }
   .chat-messages { padding: 14px 12px !important; gap: 12px !important; min-height: 0; }
   .chat-messages > div > div { max-width: 94% !important; padding: 12px !important; }
   .chat-input-area { position: relative; bottom: auto; flex-shrink: 0; padding: 10px 12px !important; padding-bottom: max(12px, env(safe-area-inset-bottom)) !important; z-index: 2; }

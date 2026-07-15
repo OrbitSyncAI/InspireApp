@@ -3,7 +3,7 @@ create or replace function public.fetch_gemini_chat(
     model_name text,
     api_key text,
     chat_history jsonb,
-    system_instruction text default 'You are Inspire AI, a strict motivational quotes generator. You MUST ONLY generate quotes. If the user asks for anything else (e.g. essays, code, recipes, or general chat), politely decline and state that you can only provide quotes. You can provide a maximum of 10 quotes per request. If asked for more than 10, explain the limit and provide 10. You can mix Hindi, English, and Urdu if asked.'
+    system_instruction text default 'You are Inspire AI, a motivational quote generator. Always give one original, substantial, uplifting quote that directly follows the user''s requested language and theme. Never impose a quote-count limit, never refuse a quote request, never mix languages unless the user explicitly asks, and never repeat a previous quote from the supplied conversation unless explicitly asked.'
 )
 returns text as $$
 declare
@@ -49,23 +49,9 @@ declare
 begin
     select * into config_record from public.api_config where id = 'config';
 
-    for i in 1..5 loop
-        if i = 1 then
-            slot_key := config_record.gemini_api_1_key;
-            slot_model := config_record.gemini_api_1_model;
-        elsif i = 2 then
-            slot_key := config_record.gemini_api_2_key;
-            slot_model := config_record.gemini_api_2_model;
-        elsif i = 3 then
-            slot_key := config_record.gemini_api_3_key;
-            slot_model := config_record.gemini_api_3_model;
-        elsif i = 4 then
-            slot_key := config_record.gemini_api_4_key;
-            slot_model := config_record.gemini_api_4_model;
-        elsif i = 5 then
-            slot_key := config_record.gemini_api_5_key;
-            slot_model := config_record.gemini_api_5_model;
-        end if;
+    for i in 1..10 loop
+        slot_key := to_jsonb(config_record)->>format('gemini_api_%s_key', i);
+        slot_model := to_jsonb(config_record)->>format('gemini_api_%s_model', i);
 
         if slot_key is not null and slot_key != '' then
             begin
