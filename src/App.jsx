@@ -331,7 +331,7 @@ export default function App() {
   const listQuotes = allFiltered.slice(listStart, listStart + PER_PAGE)
   const dailyQuotes = useMemo(() => {
     const start = dailyQuoteIndex(appQuotes)
-    return Array.from({ length: Math.min(5, appQuotes.length) }, (_, i) => appQuotes[(start + i * 17) % appQuotes.length])
+    return Array.from({ length: Math.min(10, appQuotes.length) }, (_, i) => appQuotes[(start + i * 17) % appQuotes.length])
   }, [])
   const currentPlatform = useMemo(() => {
     const forced = new URLSearchParams(window.location.search).get('platform')
@@ -910,7 +910,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
   }, []);
 
   const generate = async (overridePrompt = null) => {
-    const currentPrompt = overridePrompt !== null ? overridePrompt : (prompt.trim() || 'Generate 5 long, original motivational quotes in the best matching language.');
+    const currentPrompt = overridePrompt !== null ? overridePrompt : (prompt.trim() || 'Generate exactly one long, original English motivational quote. Do not repeat a previous quote.');
 
     setBusy(true);
     setError('');
@@ -1043,8 +1043,8 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
                     <button onClick={() => copy(m.parts[0].text)} style={{ background: 'transparent', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '4px', padding: '4px 8px', fontSize: '0.8rem', cursor: 'pointer', color: 'inherit' }}>📋 Copy</button>
                   </div>
                 )}
-                {m.role === 'model' && <button className="mini-action" style={{ marginTop: '8px' }} onClick={() => share(m.parts[0].text)}>Share quote</button>}
-                {m.role === 'user' && !busy && (
+                {false && m.role === 'model' && <button className="mini-action" style={{ marginTop: '8px' }} onClick={() => share(m.parts[0].text)}>Share quote</button>}
+                {false && m.role === 'user' && !busy && (
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
                     <button onClick={() => editMessage(idx)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem', cursor: 'pointer' }}>✏️ Edit</button>
                   </div>
@@ -1063,8 +1063,8 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
 
         <div className="chat-input-area" style={{ padding: '16px 24px', borderTop: '1px solid var(--static-border)', background: 'var(--static-bg)' }}>
           {error && <div style={{ color: '#FC8181', marginBottom: '8px', fontSize: '0.85rem' }}>{error}</div>}
-          {editing && <div className="chat-edit-notice"><span>Editing message — history stays unchanged until you send.</span><button className="mini-action" onClick={cancelEdit}>Cancel edit</button></div>}
-          {activeChat?.messages?.some(m => m.role === 'model') && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '8px' }}><button className="mini-action" onClick={copyAll}>Copy all quotes</button><button className="mini-action" onClick={() => share((activeChat?.messages || []).filter(m => m.role === 'model').map(m => m.parts[0].text).join('\n\n'))}>Share all</button></div>}
+          {false && editing && <div className="chat-edit-notice"><span>Editing message — history stays unchanged until you send.</span><button className="mini-action" onClick={cancelEdit}>Cancel edit</button></div>}
+          {false && activeChat?.messages?.some(m => m.role === 'model') && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '8px' }}><button className="mini-action" onClick={copyAll}>Copy all quotes</button><button className="mini-action" onClick={() => share((activeChat?.messages || []).filter(m => m.role === 'model').map(m => m.parts[0].text).join('\n\n'))}>Share all</button></div>}
           
           <div style={{ display: 'none' }} aria-hidden="true">
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>

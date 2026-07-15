@@ -4138,6 +4138,10 @@ button:active, .cta-btn:active, .nav-btn:active, .action-btn:active, .list-actio
 
 /* Professional CMS controls and the dedicated mobile chat layout. */
 .chat-mobile-header { display: none; }
+.chat-sidebar { padding-top: 8px; background: linear-gradient(180deg, #f8faff 0%, #eef2ff 100%) !important; }
+.chat-sidebar .cta-btn { border-radius: 12px !important; box-shadow: 0 8px 18px rgba(102,126,234,.2); }
+.chat-sidebar > div:nth-child(2) > div { border: 1px solid transparent; transition: background .18s, border-color .18s; }
+.chat-sidebar > div:nth-child(2) > div:hover { background: rgba(102,126,234,.1) !important; border-color: rgba(102,126,234,.18); }
 .mini-action { border: 1px solid var(--static-border); background: var(--surface-color, #fff); color: var(--text-primary); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: .8rem; cursor: pointer; }
 .chat-edit-notice { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 8px 0; color: var(--text-secondary); font-size: .82rem; }
 .admin-cms form { background: var(--card-bg, #fff) !important; border: 1px solid var(--static-border); box-shadow: 0 8px 28px rgba(15,23,42,.06); }
