@@ -774,7 +774,7 @@ export default function App() {
 }
 
 function DailyPage({ quotes, navTo, onFav, onSave, favorites, triggerToast }) {
-  const lead = quotes[0]
+  const lead = quotes[0] || { category: 'MOTIVATION' }
   const [g1, g2] = gradients[lead.category] || ['#667EEA', '#764BA2']
   const copy = (text) => {
     copyText(text).then(ok => {
@@ -793,7 +793,7 @@ function DailyPage({ quotes, navTo, onFav, onSave, favorites, triggerToast }) {
               <article className={i === 0 ? 'daily-quote-card daily-quote-card-lead' : 'daily-quote-card'} key={quote.text}>
                 <p className="daily-quote">“{quote.text}”</p>
                 <p className="daily-author">— {quote.author}</p>
-                <p className="daily-cat">{appCats[quote.category]?.emoji} {appCats[quote.category]?.label}</p>
+                <p className="daily-cat">{localCategories[quote.category]?.emoji} {localCategories[quote.category]?.label || 'Quotes'}</p>
                 <div className="daily-actions">
                   <button className="cta-btn" onClick={() => onFav(quote)}>{isFav ? '❤️ Liked' : '🤍 Like'}</button>
                   <button className="cta-btn cta-secondary" onClick={() => copy(quote.text)}>📋 Copy</button>
@@ -1599,10 +1599,10 @@ function AdminPanelPage({ navTo, triggerToast }) {
         
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', background: 'var(--surface-color)', padding: '10px', borderRadius: '12px', border: '1px solid var(--static-border)' }}>
           <button className={`cta-btn ${adminMainTab === 'api' ? '' : 'cta-secondary'}`} style={{ flex: 1 }} onClick={() => setAdminMainTab('api')}>API Config</button>
-          <button className={`cta-btn ${adminMainTab === 'cms' ? '' : 'cta-secondary'}`} style={{ flex: 1 }} onClick={() => setAdminMainTab('cms')}>Content Manager</button>
+          {false && <button className={`cta-btn ${adminMainTab === 'cms' ? '' : 'cta-secondary'}`} style={{ flex: 1 }} onClick={() => setAdminMainTab('cms')}>Content Manager</button>}
         </div>
 
-        {adminMainTab === 'cms' ? (
+        {false ? (
           <AdminCMS triggerToast={triggerToast} />
         ) : (
           <>

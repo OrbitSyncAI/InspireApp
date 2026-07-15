@@ -4154,14 +4154,14 @@ button:active, .cta-btn:active, .nav-btn:active, .action-btn:active, .list-actio
 .slot-card .form-group > div input { min-width: 0; width: 100% !important; }
 
 @media (max-width: 768px) {
-  .static-page:has(.chat-main) { height: calc(100dvh - 116px) !important; min-height: 0; }
+  .static-page:has(.chat-main) { height: calc(100dvh - 158px) !important; min-height: 0; padding: 0 !important; }
   .chat-main { min-width: 0; }
   .chat-mobile-header { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--static-border); background: var(--static-bg); }
   .chat-mobile-header .cta-btn { min-height: 42px; white-space: nowrap; padding: 0 12px; }
   .chat-mobile-header select { min-width: 0; flex: 1; border: 1px solid var(--static-border); border-radius: 10px; padding: 0 10px; background: var(--surface-color, #fff); color: var(--text-primary); }
-  .chat-messages { padding: 14px 12px !important; gap: 12px !important; }
+  .chat-messages { padding: 14px 12px !important; gap: 12px !important; min-height: 0; }
   .chat-messages > div > div { max-width: 94% !important; padding: 12px !important; }
-  .chat-input-area { position: sticky; bottom: 0; padding: 10px 12px !important; padding-bottom: max(10px, env(safe-area-inset-bottom)) !important; z-index: 2; }
+  .chat-input-area { position: relative; bottom: auto; flex-shrink: 0; padding: 10px 12px !important; padding-bottom: max(12px, env(safe-area-inset-bottom)) !important; z-index: 2; }
   .chat-input-area > div:last-child { align-items: center; }
   .admin-cms { margin-top: 12px !important; }
   .admin-cms form { padding: 16px !important; }
