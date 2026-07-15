@@ -816,7 +816,7 @@ function DailyPage({ quotes, navTo, onFav, onSave, favorites, triggerToast }) {
     <div className="static-page daily-page">
       <div className="static-card daily-card" style={{ background: `linear-gradient(145deg, ${g1}22, ${g2}22)` }}>
         <p className="daily-kicker">☀️ Quote of the Day</p>
-        <h1>Today’s 5 Inspirations</h1>
+        <h1>Today’s 10 Inspirations</h1>
         <div className="daily-grid">
           {displayQuotes.map((quote, i) => {
             const isFav = favorites.includes(quote.text)
@@ -921,6 +921,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
   const useThinking = false
   const setUseThinking = () => {}
   const remainingThinking = 0
+  const visibleMessageText = (text = '') => text.replace(/\n\nReply with exactly ONE long,[\s\S]*$/u, '').trim()
 
   useEffect(() => {
     localStorage.setItem('inspire-ai-chats', JSON.stringify(chats));
@@ -943,7 +944,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
 
   const generate = async (overridePrompt = null) => {
     const request = overridePrompt !== null ? overridePrompt : (prompt.trim() || 'Give me an uplifting quote.');
-    const currentPrompt = `${request}\n\nReply with exactly ONE long, original motivational quote in ${language}. Do not list multiple quotes, do not add a refusal, heading, explanation, or translation. Keep it distinct from every earlier quote in this chat unless I explicitly ask to repeat one.`;
+    const generationInstruction = `Reply with exactly ONE long, original motivational quote in ${language}. Do not list multiple quotes, do not add a refusal, heading, explanation, or translation. Keep it distinct from every earlier quote in this chat unless I explicitly ask to repeat one.`
 
     setBusy(true);
     setError('');
@@ -954,11 +955,11 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
     
     // If it's a regeneration, we don't append the user message again.
     // Assuming overridePrompt implies we just cut the history there and re-run.
-    const newMessages = [...currentMessages, { role: 'user', parts: [{ text: currentPrompt }] }];
+    const newMessages = [...currentMessages, { role: 'user', parts: [{ text: request }] }];
     
     setChats(prev => prev.map(c => {
       if (c.id === activeChatId) {
-        return { ...c, messages: newMessages, title: c.title === 'New Chat' ? currentPrompt.slice(0, 25) + '...' : c.title };
+        return { ...c, messages: newMessages, title: c.title === 'New Chat' ? request.slice(0, 25) + '...' : c.title };
       }
       return c;
     }));
@@ -967,8 +968,9 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
       // Convert format for Gemini
       const historyForGemini = newMessages.map(m => ({
         role: m.role,
-        parts: m.parts
+        parts: m.parts.map(part => ({ ...part, text: visibleMessageText(part.text) }))
       }));
+      historyForGemini[historyForGemini.length - 1].parts[0].text = `${request}\n\n${generationInstruction}`
 
       const responseText = await callAiChatResponse(historyForGemini, false);
 
@@ -1008,7 +1010,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
     if (!activeChat) return;
     const msg = activeChat.messages[index];
     if (msg.role !== 'user') return;
-    setPrompt(msg.parts[0].text);
+    setPrompt(visibleMessageText(msg.parts[0].text));
     setEditing({ chatId: activeChatId, index });
   }
 
@@ -1072,7 +1074,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
                 border: m.role === 'user' ? 'none' : '1px solid var(--static-border)'
               }}>
                 <div className="markdown-body" style={{ color: 'inherit' }}>
-                  <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>{m.parts[0].text}</ReactMarkdown>
+                  <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>{visibleMessageText(m.parts[0].text)}</ReactMarkdown>
                 </div>
                 {m.role === 'model' && (
                   <div style={{ display: 'flex', gap: '8px', marginTop: '12px', justifyContent: 'flex-end' }}>
@@ -1114,7 +1116,7 @@ function AiQuotesPage({ savedQuotes, setSavedQuotes, onFav, favorites, triggerTo
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="chat-composer-row" style={{ display: 'flex', gap: '8px' }}>
             <label className="chat-language-control">
               <span>Language</span>
               <select value={language} onChange={e => setLanguage(e.target.value)} aria-label="Quote language" disabled={busy}>
