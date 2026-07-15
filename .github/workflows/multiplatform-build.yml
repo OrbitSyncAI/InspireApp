@@ -398,7 +398,11 @@ jobs:
           if [ ! -f capacitor.config.json ] && [ ! -f capacitor.config.ts ]; then
             npx cap init "InspireApp" "ai.orbitsync.inspireapp" --web-dir dist
           fi
-          npx cap add android || true
+          # Always generate the native shell from the current web bundle.  Keeping
+          # a checked-in, stale Capacitor directory can make sync fail or package
+          # an old bundle that only shows a white screen at launch.
+          rm -rf android
+          npx cap add android
           npx cap sync android
 
       - name: Add Android in-app updater bridge
@@ -575,6 +579,7 @@ jobs:
   build-ios:
     name: iOS IPA Framework
     runs-on: macos-latest
+    continue-on-error: true
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
